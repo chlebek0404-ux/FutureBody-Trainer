@@ -1,19 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --background: #050505;
-  --foreground: #f7f7f7;
-  --fb-bg: #050505;
-  --fb-bg-secondary: #0b0b0d;
-  --fb-surface: #111214;
-  --fb-elevated: #17181b;
-  --fb-border: rgba(255, 255, 255, 0.07);
+  /* Ciemny motyw oparty na grafitcie z lekkim ciepłem, nie na czystej czerni.
+     Mniejsze skoki jasności między warstwami dają spokojniejszy obraz,
+     a złoty akcent pozostaje bez zmian. */
+  --background: #141315;
+  --foreground: #f2f1ee;
+  --fb-bg: #141315;
+  --fb-bg-secondary: #1a191c;
+  --fb-surface: #212023;
+  --fb-elevated: #2a292d;
+  --fb-border: rgba(255, 255, 255, 0.09);
   --fb-gold: #ffc400;
   --fb-gold-highlight: #ffd21a;
   --fb-gold-dark: #d99f00;
-  --fb-text: #f7f7f7;
-  --fb-text-secondary: #a7a7ac;
-  --fb-text-muted: #68686d;
+  --fb-text: #f2f1ee;
+  --fb-text-secondary: #adaca8;
+  --fb-text-muted: #7b7a77;
   --fb-success: #35c779;
   --fb-warning: #ffb020;
   --fb-error: #ff5c5c;
@@ -121,19 +124,33 @@ select:focus-visible {
 }
 
 .futurebody-app .fb-dark-surface {
-  background-color: #0b0b0d !important;
-  color: #f7f7f7 !important;
+  background-color: var(--fb-bg-secondary) !important;
+  color: var(--fb-text) !important;
   color-scheme: dark;
 }
 
 /* Przyklejony nagłówek musi być nieprzezroczysty — przy półprzezroczystym tle
    treść przewijana pod spodem prześwitywała przez pasek wyszukiwania. */
 .futurebody-app .fb-dark-surface[class*="bg-[#050505]"] {
-  background-color: #050505 !important;
+  background-color: var(--fb-bg) !important;
 }
 
 .futurebody-app .fb-dark-surface[class*="bg-[#111214]"] {
-  background-color: #111214 !important;
+  background-color: var(--fb-surface) !important;
+}
+
+/* Pozostałe ciemne tła zapisane wprost w komponentach mapujemy na warstwy motywu,
+   żeby cała aplikacja zmieniała się razem z paletą, a nie fragmentami. */
+.futurebody-app :where([class*="bg-[#0b0b0d]"]) {
+  background-color: var(--fb-bg-secondary) !important;
+}
+
+.futurebody-app :where([class*="bg-[#111214]"], [class*="bg-[#0d0d0d]"], [class*="bg-[#090909]"]) {
+  background-color: var(--fb-surface) !important;
+}
+
+.futurebody-app :where([class*="bg-[#17181b]"], [class*="bg-[#181818]"]) {
+  background-color: var(--fb-elevated) !important;
 }
 
 .futurebody-app .fb-selected {
