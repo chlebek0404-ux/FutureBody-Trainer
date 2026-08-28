@@ -19,6 +19,27 @@ export type Client = {
   tags: string[];
 };
 
+export type InvitationStatus = "active" | "used" | "expired" | "revoked";
+
+export type ClientInvitation = {
+  clientId: string;
+  clientName: string;
+  trainerName: string;
+  code: string;
+  status: InvitationStatus;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type CalendarAppointment = {
+  id: string;
+  clientId: string;
+  date: string;
+  hour: number;
+  kind?: string;
+  status?: "Zaplanowany" | "Wykonany" | "Anulowany";
+};
+
 export type TrainerTask = {
   id: string;
   title: string;

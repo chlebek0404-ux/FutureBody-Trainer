@@ -44,7 +44,11 @@ Skopiuj `.env.example` do `.env.local` i uzupełnij wartości Supabase. Sekrety 
 ## Aktualny stan
 
 - po uruchomieniu aplikacja pokazuje splash i pusty ekran logowania;
-- nie ma kont testowych ani przykładowych rekordów użytkowników;
+- gdy Supabase nie jest skonfigurowany, działają dwa konta prezentacyjne
+  (`demo@movendo.pl` i `client@movendo.pl`, hasło `demo1234`) na danych
+  budowanych w pamięci przez `lib/demo-account.ts`;
+- po podłączeniu Supabase konta prezentacyjne przestają działać — ta ścieżka
+  nie jest wtedy w ogóle wywoływana i nie omija logowania;
 - logowanie nie omija Supabase;
 - rola konta pochodzi wyłącznie z sesji Supabase, nie z `localStorage`;
 - sesja jest odtwarzana przy starcie, a wylogowanie i wygaśnięcie tokenu zamykają panel;
@@ -56,7 +60,11 @@ Skopiuj `.env.example` do `.env.local` i uzupełnij wartości Supabase. Sekrety 
 
 - rozwijaj istniejące komponenty inkrementalnie;
 - zachowuj routing i główne przepływy produktu;
-- nie przywracaj automatycznego logowania ani przykładowych klientów;
+- nie przywracaj automatycznego logowania — konta prezentacyjne wymagają
+  podania danych i działają wyłącznie przy braku Supabase;
+- nie dodawaj przykładowych klientów do ścieżki produkcyjnej ani do stanu
+  początkowego aplikacji; dane prezentacyjne mogą powstawać tylko po
+  zalogowaniu na konto prezentacyjne;
 - nie dodawaj danych finansowych;
 - projektuj mobile-first i utrzymuj minimum 44 px dla głównych pól dotykowych;
 - po większej zmianie uruchom lint, sprawdzenie TypeScript i build;

@@ -54,7 +54,9 @@ import {
   conversations,
   initialTasks,
   materials,
+  type CalendarAppointment,
   type Client,
+  type ClientInvitation,
 } from "@/lib/demo-data";
 import ExerciseMotion from "@/components/exercise-motion";
 import ExerciseLibraryPanel from "@/components/exercise-library-panel";
@@ -63,7 +65,8 @@ import { ClientWorkout } from "@/components/client-workout";
 import { exerciseCategories, exerciseLibrary, searchExercises, suggestExercises, type ExerciseRecord } from "@/lib/exercise-library";
 import { createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
 import { downloadMovendoPdf } from "@/lib/pdf-export";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
+import { buildDemoWorkspace, demoClientEmail, demoClientId, demoTrainerEmail, matchDemoAccount } from "@/lib/demo-account";
 import { loadAccountSession, restoreAccountSession, type AccountRole, type AccountSession } from "@/lib/session";
 
 type View =
@@ -171,6 +174,7 @@ type LoginScreenProps = {
   onResetPassword: (email: string) => Promise<string | null>;
   onValidateCode: (code: string) => Promise<{ info?: ActivationInfo; error?: string }>;
   onActivateClient: (info: ActivationInfo, email: string, password: string) => Promise<string | null>;
+  showDemoAccounts?: boolean;
 };
 
 function FutureBodySplash() {
@@ -180,7 +184,7 @@ function FutureBodySplash() {
   </main>;
 }
 
-function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPassword, onValidateCode, onActivateClient }: LoginScreenProps) {
+function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPassword, onValidateCode, onActivateClient, showDemoAccounts = false }: LoginScreenProps) {
   const normalizedInitialCode = initialCode.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
   const [mode, setMode] = useState<AuthMode>(normalizedInitialCode ? "code" : "login");
   const [email, setEmail] = useState("");
@@ -300,6 +304,21 @@ function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPass
               <p className="mt-5 text-center text-[11px] text-black/38">Nie masz konta? <button onClick={() => changeMode("trainer-register")} className="font-black text-black">Zarejestruj się jako trener</button></p>
               <div className="my-6 h-px bg-black/[0.07]" />
               <div className="text-center"><p className="text-xs font-black">Jesteś podopiecznym?</p><p className="mt-1 text-[10px] text-black/35">Aktywuj konto kodem otrzymanym od trenera.</p><button onClick={() => changeMode("code")} className="mt-4 h-11 w-full rounded-full border border-black/12 text-[10px] font-black uppercase tracking-[0.09em] transition hover:bg-black hover:text-white">Mam kod od trenera</button></div>
+              {showDemoAccounts ? (
+                <div className="mt-6 rounded-2xl border border-dashed border-black/12 bg-[#f7f7f5] p-4">
+                  <p className="text-[9px] font-black uppercase tracking-[0.12em] text-black/40">Tryb prezentacyjny · brak backendu</p>
+                  <p className="mt-2 text-[10px] leading-4 text-black/45">Baza nie jest podłączona, więc działają tylko konta prezentacyjne na danych przykładowych.</p>
+                  <div className="mt-3 space-y-2">
+                    {[["Trener", demoTrainerEmail], ["Podopieczny", demoClientEmail]].map(([label, address]) => (
+                      <button key={address} type="button" onClick={() => { setEmail(address); setPassword("demo1234"); }} className="flex w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2.5 text-left transition hover:bg-black hover:text-white">
+                        <span className="min-w-0"><span className="block text-[9px] font-black uppercase tracking-wider opacity-50">{label}</span><span className="block truncate text-[11px] font-bold">{address}</span></span>
+                        <span className="shrink-0 text-[9px] font-black uppercase tracking-wider opacity-60">Wypełnij</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[9px] text-black/32">Hasło dla obu kont: <strong className="font-black text-black/55">demo1234</strong></p>
+                </div>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -318,9 +337,6 @@ function PasswordInput({ label, value, onChange, visible, onToggle, autoComplete
   return <label className="block"><span className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-black/38">{label}</span><div className="flex h-12 items-center rounded-xl border border-black/10 bg-[#f7f7f5] px-4 focus-within:border-black"><LockKeyhole size={15} className="mr-3 text-black/28" /><input required value={value} onChange={(event) => onChange(event.target.value)} type={visible ? "text" : "password"} autoComplete={autoComplete} className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none" /><button type="button" onClick={onToggle} aria-label={visible ? "Ukryj hasło" : "Pokaż hasło"}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>;
 }
 
-type InvitationStatus = "active" | "used" | "expired" | "revoked";
-type ClientInvitation = { clientId: string; clientName: string; trainerName: string; code: string; status: InvitationStatus; createdAt: string; expiresAt: string };
-type CalendarAppointment = { id: string; clientId: string; date: string; hour: number; kind?: string; status?: "Zaplanowany" | "Wykonany" | "Anulowany" };
 type TrainerNotification = { id: string; title: string; detail: string; view: View; read: boolean };
 type ThemePreference = "dark" | "light" | "system";
 type TrainerWorkoutRoute = { clientId: string; planId: string; dayId: string };
@@ -443,6 +459,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const [invitations, setInvitations] = useState<ClientInvitation[]>(() => readStoredJson("futurebody_invitations", []));
   const [inviteDialog, setInviteDialog] = useState<ClientInvitation | null>(null);
   const [clientSession, setClientSession] = useState<Client | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
   const [appointments, setAppointments] = useState<CalendarAppointment[]>(() => readStoredJson("movendo_calendar_history", []));
   const [workoutPlans, setWorkoutPlans] = useState<TrainingProgram[]>(readStoredPlans);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutCompletion[]>(() => readStoredJson("futurebody_workout_history", []));
@@ -591,10 +608,36 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.setTimeout(() => setToast(null), 2600);
   }
 
+  // Ścieżka prezentacyjna. Uruchamia się tylko przy braku Supabase, więc nigdy nie omija
+  // prawdziwego logowania — po podłączeniu bazy ta funkcja nie jest wywoływana.
+  function loginWithDemoAccount(email: string, password: string) {
+    const demoRole = matchDemoAccount(email, password);
+    if (!demoRole) return "Baza nie jest podłączona. Zaloguj się kontem prezentacyjnym albo skonfiguruj Supabase.";
+    const workspace = buildDemoWorkspace();
+    setClients(workspace.clients);
+    setTasks(workspace.tasks);
+    setWorkoutPlans(workspace.plans);
+    setAppointments(workspace.appointments);
+    setInvitations(workspace.invitations);
+    setTrainerNotifications([
+      { id: "demo-note-1", title: "Nowy check-in", detail: "Anna Kowalska przesłała pomiary tygodniowe.", view: "checkins", read: false },
+      { id: "demo-note-2", title: "Plan do przygotowania", detail: "Julia Wrona czeka na pierwszy plan treningowy.", view: "plans", read: false },
+      { id: "demo-note-3", title: "Trening zapisany", detail: "Marek Nowicki ukończył Dzień B.", view: "progress", read: true },
+    ]);
+    setDemoMode(true);
+    if (demoRole === "client") {
+      setClientSession(workspace.clients.find((client) => client.id === demoClientId) ?? null);
+      setRole("client");
+      return null;
+    }
+    setRole("trainer");
+    return null;
+  }
+
   async function login(email: string, password: string) {
     if (!email || !password) return "Uzupełnij adres e-mail i hasło.";
     const supabase = getSupabaseBrowserClient();
-    if (!supabase) return "Logowanie zostanie uruchomione po podłączeniu bezpiecznej bazy danych.";
+    if (!supabase) return loginWithDemoAccount(email, password);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return "Nie udało się zalogować. Sprawdź dane i spróbuj ponownie.";
     const pendingInvitation = window.localStorage.getItem("movendo_pending_invitation");
@@ -673,6 +716,16 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   async function logout() {
     const supabase = getSupabaseBrowserClient();
     if (supabase) await supabase.auth.signOut();
+    if (demoMode) {
+      setDemoMode(false);
+      setClients([]);
+      setTasks([]);
+      setWorkoutPlans([]);
+      setAppointments([]);
+      setInvitations([]);
+      setWorkoutHistory([]);
+      setTrainerNotifications([]);
+    }
     setRole(null);
     setClientSession(null);
     setActiveView("dashboard");
@@ -914,9 +967,9 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const focusedFlow = Boolean(trainerWorkout || selectedPlanId);
 
   if (booting) return <FutureBodySplash/>;
-  if (!role) return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} />;
-  if (role === "client" && clientSession) return <ClientPortal client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} />;
-  if (role === "client") return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} />;
+  if (!role) return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} showDemoAccounts={!isSupabaseConfigured()} />;
+  if (role === "client" && clientSession) return <ClientPortal client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} demoMode={demoMode} />;
+  if (role === "client") return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} showDemoAccounts={!isSupabaseConfigured()} />;
 
   return (
     <div className="futurebody-app min-h-[100svh] bg-[#050505] text-[#f7f7f7]">
@@ -959,8 +1012,9 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
             </nav>
           ) : null}
         </div>
+        {demoMode ? <p className="mb-2 rounded-[14px] border border-dashed border-[#ffc400]/35 bg-[#ffc400]/[0.07] px-3 py-2 text-[9px] font-black uppercase tracking-[0.11em] text-[#ffc400]">Tryb prezentacyjny · dane przykładowe</p> : null}
         <div className="rounded-[18px] border border-white/[0.07] bg-[#111214] p-3">
-          <div className="flex items-center gap-3"><Avatar initials="TR" size="sm" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">Konto trenera</p><p className="truncate text-[9px] text-white/35">Trener</p></div><button onClick={logout} className="text-white/35 hover:text-white" aria-label="Wyloguj"><LogOut size={16} /></button></div>
+          <div className="flex items-center gap-3"><Avatar initials="TR" size="sm" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">Konto trenera</p><p className="truncate text-[9px] text-white/35">{demoMode ? "Konto prezentacyjne" : "Trener"}</p></div><button onClick={logout} className="text-white/35 hover:text-white" aria-label="Wyloguj"><LogOut size={16} /></button></div>
         </div>
       </aside>
 
@@ -1503,6 +1557,7 @@ function ClientPortal({
   onComplete,
   onLogout,
   notify,
+  demoMode = false,
 }: {
   client: Client;
   program?: TrainingProgram;
@@ -1510,6 +1565,7 @@ function ClientPortal({
   onComplete: (completion: WorkoutCompletion) => void;
   onLogout: () => void;
   notify: (text: string) => void;
+  demoMode?: boolean;
 }) {
   const [tab, setTab] = useState<"today" | "plan" | "progress" | "messages" | "profile">("today");
   const [activeWorkoutDayId, setActiveWorkoutDayId] = useState<string | null>(null);
@@ -1536,7 +1592,7 @@ function ClientPortal({
       <header className="fb-dark-surface sticky top-0 z-30 border-b border-white/[0.07] bg-[#050505]/92 pt-[env(safe-area-inset-top)] text-white backdrop-blur-xl">
         <div className="mx-auto flex h-[70px] max-w-6xl items-center px-4 sm:px-7">
           <img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover" />
-          <div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">Panel podopiecznego</p></div>
+          <div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">{demoMode ? "Tryb prezentacyjny" : "Panel podopiecznego"}</p></div>
           <nav className="mx-auto hidden items-center gap-1 md:flex">{tabs.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => { setTab(item.id); setActiveWorkoutDayId(null); }} className={`flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black ${tab === item.id ? "bg-[#ffc400] text-[#050505]" : "text-white/48 hover:text-white"}`}><Icon size={14} />{item.label}</button>; })}</nav>
           <button onClick={onLogout} className="ml-auto grid h-9 w-9 place-items-center rounded-full border border-black/10 bg-white" aria-label="Wyloguj"><LogOut size={15} /></button>
         </div>

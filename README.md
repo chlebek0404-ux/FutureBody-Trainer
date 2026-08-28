@@ -31,7 +31,16 @@ Kompletne centrum zarządzania codzienną pracą trenera personalnego w ciemnym,
 
 ## Stan danych i logowanie
 
-Projekt nie zawiera kont demonstracyjnych ani przykładowych zapisów użytkowników. Po uruchomieniu wyświetlany jest ekran logowania z pustymi polami. Logowanie, rejestracja i aktywacja kont będą działały po skonfigurowaniu Supabase za pomocą zmiennych z `.env.example`.
+Po uruchomieniu wyświetlany jest ekran logowania z pustymi polami. Logowanie, rejestracja i aktywacja kont działają po skonfigurowaniu Supabase za pomocą zmiennych z `.env.example`.
+
+Dopóki Supabase nie jest podłączony, aplikację można obejrzeć na dwóch kontach prezentacyjnych:
+
+| Rola | Adres e-mail | Hasło |
+| --- | --- | --- |
+| Trener | `demo@movendo.pl` | `demo1234` |
+| Podopieczny | `client@movendo.pl` | `demo1234` |
+
+Ekran logowania pokazuje wtedy skrót do obu kont, a panel jest oznaczony jako tryb prezentacyjny. Dane pochodzą z `lib/demo-account.ts`, powstają w pamięci po zalogowaniu i znikają po wylogowaniu. Gdy w `.env.local` pojawią się zmienne Supabase, ta ścieżka przestaje być wywoływana — kont prezentacyjnych nie da się użyć do obejścia prawdziwego logowania.
 
 ## Uruchomienie developerskie
 
