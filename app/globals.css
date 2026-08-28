@@ -126,8 +126,10 @@ select:focus-visible {
   color-scheme: dark;
 }
 
+/* Przyklejony nagłówek musi być nieprzezroczysty — przy półprzezroczystym tle
+   treść przewijana pod spodem prześwitywała przez pasek wyszukiwania. */
 .futurebody-app .fb-dark-surface[class*="bg-[#050505]"] {
-  background-color: rgba(5, 5, 5, 0.94) !important;
+  background-color: #050505 !important;
 }
 
 .futurebody-app .fb-dark-surface[class*="bg-[#111214]"] {
@@ -158,7 +160,7 @@ select:focus-visible {
   background-color: var(--fb-elevated) !important;
 }
 
-.futurebody-app :where([class*="bg-[#f4f4f2]"], [class*="bg-[#f3f3f1]"], [class*="bg-[#f2f2f0]"], [class*="bg-[#f1f1ef]"], [class*="bg-[#f0f0ee]"], [class*="bg-[#f7f7f5]"], [class*="bg-[#fafaf8]"], [class*="bg-[#ededeb]"], [class*="bg-[#eeeeec]"]) {
+.futurebody-app :where([class*="bg-[#f4f4f2]"], [class*="bg-[#f3f3f1]"], [class*="bg-[#f2f2f0]"], [class*="bg-[#f1f1ef]"], [class*="bg-[#f0f0ee]"], [class*="bg-[#f7f7f5]"], [class*="bg-[#fafaf8]"], [class*="bg-[#ededeb]"], [class*="bg-[#eeeeec]"], [class*="bg-[#f5f5f3]"], [class*="bg-[#efefed]"], [class*="bg-[#e9e9e7]"]) {
   background-color: var(--fb-bg-secondary) !important;
 }
 
@@ -299,6 +301,16 @@ select:focus-visible {
   to { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
+/* Arkusz dolny wjeżdża od dołu na telefonie, a na dużym ekranie pojawia się bez ruchu. */
+@keyframes ui-sheet-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ui-sheet {
+  animation: ui-sheet-in 320ms var(--motion-ease) backwards;
+}
+
 /* Wejście do aplikacji po zalogowaniu — spokojne przejęcie ekranu zamiast cięcia. */
 @keyframes futurebody-app-in {
   from { opacity: 0; transform: translateY(8px) scale(0.994); filter: blur(3px); }
@@ -310,8 +322,11 @@ select:focus-visible {
   to { opacity: 0; }
 }
 
+/* `backwards`, nie `both`: po animacji element wraca do stanu bez transformacji.
+   Utrwalony `transform` tworzy układ odniesienia dla `position: fixed`,
+   przez co okna modalne przestają być pozycjonowane względem ekranu. */
 .futurebody-app-enter {
-  animation: futurebody-app-in 620ms var(--motion-ease) both;
+  animation: futurebody-app-in 620ms var(--motion-ease) backwards;
 }
 
 /* Przewijanie: pęd na dotyku, brak łańcuchowania na rodzica i spójny suwak.
@@ -394,8 +409,11 @@ select:focus-visible {
   }
 }
 
+/* `backwards`, nie `both`. Utrwalony `transform` — nawet tożsamościowy —
+   tworzy układ odniesienia dla `position: fixed`, przez co okna modalne
+   renderowane wewnątrz widoku przestają być pozycjonowane względem ekranu. */
 .ui-view {
-  animation: ui-view-enter var(--motion-slow) var(--motion-ease) both;
+  animation: ui-view-enter var(--motion-slow) var(--motion-ease) backwards;
 }
 
 .ui-surface {
@@ -564,6 +582,12 @@ select:focus-visible {
 
   .futurebody-handoff {
     display: none;
+  }
+
+  .ui-sheet {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 
   .futurebody-splash-glow {

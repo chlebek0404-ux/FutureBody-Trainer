@@ -62,7 +62,7 @@ export type WorkoutCompletion = {
 export function createTrainingDays(dayCount: number, exerciseIds: string[]): TrainingDay[] {
   const safeDayCount = Math.max(1, Math.min(dayCount, 7));
   const sourceIds = exerciseIds.length ? exerciseIds : exerciseLibrary.slice(0, 6).map((exercise) => exercise.id);
-  const dayNames = ["Dzień A", "Dzień B", "Dzień C", "Dzień D", "Dzień E", "Dzień F", "Dzień G"];
+  const dayNames = Array.from({ length: 7 }, (_, index) => `Dzień ${index + 1}`);
   const focuses = ["Siła całego ciała", "Góra ciała", "Dół ciała", "Technika i core", "Objętość", "Kondycja", "Mobilność"];
 
   return Array.from({ length: safeDayCount }, (_, dayIndex) => {
