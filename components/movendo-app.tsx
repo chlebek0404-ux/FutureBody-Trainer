@@ -1511,7 +1511,9 @@ function ScheduleDialog({ slot, clients, currentClientId, onClose, onSelect }: {
 
 function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onCloseDetail, onSavePlan, onUpdatePlan, notify, planIntentClientId }: { clients: Client[]; planIntentClientId?: string | null; workoutPlans: TrainingProgram[]; initialPlanId: string | null; onOpenDetail: (planId: string) => void; onCloseDetail: () => void; onSavePlan: (plan: TrainingProgram, clientId: string) => void; onUpdatePlan: (plan: TrainingProgram) => void; notify: (text: string) => void }) {
   // Wejście z profilu podopiecznego od razu otwiera kreator planu.
-  const [wizardMode, setWizardMode] = useState<"personal" | "template" | null>(planIntentClientId ? "personal" : null);
+  // `open` bez wskazanej ścieżki pokazuje ekran wyboru sposobu tworzenia planu.
+  const [wizardOpen, setWizardOpen] = useState(Boolean(planIntentClientId));
+  const [wizardPath, setWizardPath] = useState<PlanPath | null>(null);
   const [editingPlan, setEditingPlan] = useState<TrainingProgram | null>(() => initialPlanId ? workoutPlans.find((plan) => plan.id === initialPlanId) ?? null : null);
 
   if (editingPlan) {
@@ -1524,8 +1526,8 @@ function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onClose
       title="Plany treningowe"
       subtitle="Programy podopiecznych w jednym miejscu — bez duplikatów i zbędnych ekranów."
       action="Nowy plan"
-      onAction={() => setWizardMode("personal")}
-      secondary={<button onClick={() => setWizardMode("template")} className="h-11 rounded-full border border-black/10 bg-white px-4 text-[10px] font-black uppercase tracking-wider"><Library size={14} className="mr-2 inline"/>Użyj szablonu</button>}
+      onAction={() => { setWizardPath(null); setWizardOpen(true); }}
+      secondary={<button onClick={() => { setWizardPath("auto"); setWizardOpen(true); }} className="h-11 rounded-full border border-black/10 bg-white px-4 text-[10px] font-black uppercase tracking-wider"><Library size={14} className="mr-2 inline"/>Użyj szablonu</button>}
     />
 
     <section className={`${cardClass} mb-4 grid gap-px overflow-hidden bg-black/[0.055] sm:grid-cols-3`}>
@@ -1550,25 +1552,271 @@ function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onClose
       </article>;
     })}</div> : <section className={cardClass}><EmptyState icon={Dumbbell} title="Nie masz jeszcze planów" text="Utwórz pierwszy plan i przypisz go do podopiecznego."/></section>}
 
-    {wizardMode ? <PlanWizard mode={wizardMode} clients={clients} presetClientId={planIntentClientId ?? undefined} onClose={() => setWizardMode(null)} onSave={(plan, clientId) => { onSavePlan(plan, clientId); setWizardMode(null); }}/> : null}
+    {wizardOpen ? <PlanWizard initialPath={wizardPath} clients={clients} presetClientId={planIntentClientId ?? undefined} onClose={() => setWizardOpen(false)} onSave={(plan, clientId) => { onSavePlan(plan, clientId); setWizardOpen(false); }}/> : null}
     {editingPlan ? <PlanEditor plan={editingPlan} onClose={() => setEditingPlan(null)} onSave={(plan) => { onUpdatePlan(plan); setEditingPlan(null); }}/> : null}
   </>;
 }
 
-function PlanWizard({ mode,clients,presetClientId,onClose,onSave }: { mode: "personal"|"template"; clients: Client[]; presetClientId?: string; onClose: () => void; onSave: (plan: TrainingProgram,clientId: string) => void; }) {
-  const [step,setStep]=useState(presetClientId ? 1 : 0);
-  const [clientId,setClientId]=useState(presetClientId ?? clients[0]?.id ?? "");
-  const [survey,setSurvey]=useState({ goal: mode==="template"? "Sprawność ogólna":"Redukcja tkanki tłuszczowej",level: "Początkujący",days: "3",duration: "60",equipment: "Pełna siłownia",limitations: "",preference: "Trening siłowy",recovery: "Dobra" });
-  const [search,setSearch]=useState("");
-  const suggested=useMemo(() => suggestExercises(survey.goal,18),[survey.goal]);
-  const [selectedIds,setSelectedIds]=useState<string[]>(() => suggestExercises(survey.goal,8).map((item) => item.id));
-  const catalog=useMemo(() => searchExercises(search,{ limit: 12 }),[search]);
-  const visibleExercises=search? catalog:suggested;
-  const selectedClient=clients.find((client) => client.id===clientId);
-  function setField(key: keyof typeof survey,value: string) { setSurvey((current) => ({ ...current,[key]: value })); }
-  function toggleExercise(id: string) { setSelectedIds((current) => current.includes(id)? current.filter((item) => item!==id):[...current,id]); }
-  function finish() { if(!selectedClient) return; const plan=createTrainingProgram({ name: `${selectedClient.name.split(" ")[0]} · ${survey.goal}`,category: survey.goal,dayCount: Number(survey.days),clientId: selectedClient.id,exerciseIds: selectedIds,duration: "8 tyg." }); onSave(plan,selectedClient.id); }
-  return <div className="fixed inset-0 z-[88] overflow-y-auto bg-black/65 p-3 backdrop-blur-sm sm:p-6"><div className="mx-auto min-h-full max-w-5xl rounded-[30px] bg-[#f4f4f2] shadow-2xl"><header className="sticky top-0 z-10 flex items-center border-b border-black/[0.07] bg-[#f4f4f2]/95 px-5 py-4 backdrop-blur-xl sm:px-7"><div><p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/30">Kreator planu · krok {step+1} z 4</p><h2 className="mt-1 text-xl font-black">{mode==="personal"? "Plan personalizowany od początku":"Gotowa baza z dopasowaniem"}</h2></div><button onClick={onClose} className="ml-auto grid h-9 w-9 place-items-center rounded-full bg-white"><X size={16} /></button></header><div className="grid gap-2 px-5 pt-5 sm:grid-cols-4 sm:px-7">{["Podopieczny","Ankieta","Ćwiczenia","Podsumowanie"].map((label,index) => <div key={label} className={`rounded-full px-3 py-2 text-center text-[9px] font-black uppercase tracking-wider ${step===index? "bg-black text-white":index<step? "bg-emerald-100 text-emerald-800":"bg-white text-black/30"}`}>{index<step? "✓ ":""}{label}</div>)}</div><main className="px-5 py-7 sm:px-7">{step===0? <div><h3 className="text-2xl font-black tracking-[-0.04em]">Dla kogo tworzysz plan?</h3><p className="mt-2 text-sm text-black/40">Cel i profil podopiecznego połączą się automatycznie z nowym planem.</p><div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{clients.filter((client) => client.status!=="Wstrzymany").map((client) => <button key={client.id} onClick={() => setClientId(client.id)} className={`flex items-center gap-3 rounded-2xl border p-4 text-left ${clientId===client.id? "border-black bg-black text-white":"border-black/[0.07] bg-white"}`}><Avatar initials={client.initials} dark={clientId===client.id} /><div className="min-w-0"><p className="truncate text-xs font-black">{client.name}</p><p className={`truncate text-[9px] ${clientId===client.id? "text-white/40":"text-black/36"}`}>{client.goal}</p></div></button>)}</div></div>:step===1? <div><h3 className="text-2xl font-black tracking-[-0.04em]">Ankieta i założenia</h3><p className="mt-2 text-sm text-black/40">Odpowiedzi sterują rekomendacjami i doborem ćwiczeń.</p><div className="mt-6 grid gap-4 sm:grid-cols-2">{[["goal","Główny cel",["Redukcja tkanki tłuszczowej","Budowa siły","Masa mięśniowa","Sprawność ogólna","Mobilność i powrót do ruchu"]],["level","Doświadczenie",["Początkujący","Średniozaawansowany","Zaawansowany"]],["days","Dni treningowe w tygodniu",["2","3","4","5"]],["duration","Czas jednej sesji",["30","45","60","75"]],["equipment","Dostępny sprzęt",["Pełna siłownia","Hantle i ławka","Masa ciała","Domowa siłownia"]],["preference","Preferowany styl",["Trening siłowy","Trening funkcjonalny","Obwody","Spokojne tempo techniczne"]],["recovery","Sen i regeneracja",["Słaba","Przeciętna","Dobra","Bardzo dobra"]]].map(([key,label,options]) => <label key={key as string}><span className="mb-2 block text-[9px] font-black uppercase tracking-wider text-black/32">{label as string}</span><select value={survey[key as keyof typeof survey]} onChange={(event) => setField(key as keyof typeof survey,event.target.value)} className="h-12 w-full rounded-xl border-0 bg-white px-3 text-xs font-bold outline-none">{(options as string[]).map((option) => <option key={option}>{option}</option>)}</select></label>)}<label className="sm:col-span-2"><span className="mb-2 block text-[9px] font-black uppercase tracking-wider text-black/32">Kontuzje, ograniczenia i zalecenia specjalisty</span><textarea value={survey.limitations} onChange={(event) => setField("limitations",event.target.value)} className="min-h-24 w-full rounded-xl border-0 bg-white p-3 text-xs outline-none" placeholder="Np. ograniczenie zgięcia kolana, zalecenie fizjoterapeuty…" /></label></div></div>:step===2? <div><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h3 className="text-2xl font-black tracking-[-0.04em]">Dobierz ćwiczenia</h3><p className="mt-2 text-sm text-black/40">{selectedIds.length} wybranych · katalog {exerciseLibrary.length} pozycji</p></div><div className="flex h-11 items-center rounded-full bg-white px-4"><Search size={15} className="mr-2 text-black/28" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-56 bg-transparent text-xs outline-none" placeholder="Szukaj w całej bazie…" /></div></div><div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{visibleExercises.map((exercise) => <button key={exercise.id} onClick={() => toggleExercise(exercise.id)} className={`overflow-hidden rounded-2xl border text-left ${selectedIds.includes(exercise.id)? "border-black bg-black text-white":"border-black/[0.07] bg-white"}`}><ExerciseMotion pattern={exercise.pattern} compact /><div className="p-4"><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-black">{exercise.name}</p><p className={`mt-1 text-[9px] ${selectedIds.includes(exercise.id)? "text-white/40":"text-black/35"}`}>{exercise.muscle} · {exercise.equipment}</p></div><span className={`grid h-6 w-6 place-items-center rounded-full ${selectedIds.includes(exercise.id)? "bg-white text-black":"bg-black/[0.06]"}`}>{selectedIds.includes(exercise.id)? <Check size={13} />:<Plus size={13} />}</span></div></div></button>)}</div></div>:<div><h3 className="text-2xl font-black tracking-[-0.04em]">Plan gotowy do przypisania</h3><p className="mt-2 text-sm text-black/40">Wszystkie elementy będą widoczne także w portalu podopiecznego.</p><div className="mt-6 grid gap-4 lg:grid-cols-[1fr_.75fr]"><section className={`${cardClass} p-6`}><p className="text-[9px] font-black uppercase tracking-wider text-black/30">Nowy plan</p><h4 className="mt-2 text-2xl font-black">{selectedClient?.name.split(" ")[0]} · {survey.goal}</h4><div className="mt-6 grid grid-cols-3 gap-3">{[["Dni",`${survey.days} / tydz.`],["Sesja",`${survey.duration} min`],["Ćwiczenia",String(selectedIds.length)]].map(([label,value]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase text-black/30">{label}</p><p className="mt-2 text-sm font-black">{value}</p></div>)}</div><dl className="mt-6 space-y-3">{[["Poziom",survey.level],["Sprzęt",survey.equipment],["Styl",survey.preference],["Regeneracja",survey.recovery],["Ograniczenia",survey.limitations||"Brak zgłoszonych"]].map(([label,value]) => <div key={label} className="flex justify-between gap-4 border-b border-black/[0.06] pb-3 text-xs"><dt className="text-black/38">{label}</dt><dd className="text-right font-bold">{value}</dd></div>)}</dl></section><section className="rounded-[24px] bg-black p-6 text-white"><Sparkles size={21} /><h4 className="mt-5 text-xl font-black">Połączone automatycznie</h4><ul className="mt-5 space-y-3 text-xs text-white/50">{["Profil i cel podopiecznego","Ankieta startowa i ograniczenia","Wybrane ćwiczenia oraz animacje","Portal podopiecznego i postępy"].map((item) => <li key={item} className="flex gap-2"><Check size={14} className="shrink-0 text-white" />{item}</li>)}</ul></section></div></div>}</main><footer className="sticky bottom-0 flex items-center justify-between border-t border-black/[0.07] bg-[#f4f4f2]/95 px-5 py-4 backdrop-blur-xl sm:px-7"><button disabled={step===0} onClick={() => setStep((current) => Math.max(0,current-1))} className="h-11 rounded-full border border-black/10 px-5 text-[10px] font-black uppercase disabled:opacity-30">Wstecz</button>{step<3? <button disabled={step===0&&!clientId} onClick={() => setStep((current) => Math.min(3,current+1))} className="h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase text-white">Dalej</button>:<button disabled={!selectedIds.length} onClick={finish} className="h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase text-white disabled:opacity-30">Przypisz plan</button>}</footer></div></div>;
+type PlanPath = "auto" | "manual";
+
+function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
+  initialPath: PlanPath | null;
+  clients: Client[];
+  presetClientId?: string;
+  onClose: () => void;
+  onSave: (plan: TrainingProgram, clientId: string) => void;
+}) {
+  const [path, setPath] = useState<PlanPath | null>(initialPath);
+  const [step, setStep] = useState(presetClientId ? 1 : 0);
+  const [clientId, setClientId] = useState(presetClientId ?? clients[0]?.id ?? "");
+  const [survey, setSurvey] = useState({
+    goal: "Redukcja tkanki tłuszczowej", level: "Początkujący", days: "3", duration: "60",
+    equipment: "Pełna siłownia", limitations: "", preference: "Trening siłowy", recovery: "Dobra",
+  });
+  const [search, setSearch] = useState("");
+  const [manualIds, setManualIds] = useState<string[]>([]);
+
+  const suggested = useMemo(() => suggestExercises(survey.goal, 18), [survey.goal]);
+  const catalog = useMemo(() => searchExercises(search, { limit: 12 }), [search]);
+  const visibleExercises = search ? catalog : suggested;
+  const selectedClient = clients.find((client) => client.id === clientId);
+
+  // Ścieżka automatyczna dobiera ćwiczenia z celu; ręczna korzysta z wyboru trenera.
+  const autoIds = useMemo(() => suggestExercises(survey.goal, Number(survey.days) * 3).map((item) => item.id), [survey.goal, survey.days]);
+  const exerciseIds = path === "auto" ? autoIds : manualIds;
+
+  const steps = path === "manual"
+    ? ["Podopieczny", "Ankieta", "Ćwiczenia", "Podsumowanie"]
+    : ["Podopieczny", "Ankieta", "Podsumowanie"];
+  const lastStep = steps.length - 1;
+
+  function setField(key: keyof typeof survey, value: string) {
+    setSurvey((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleExercise(id: string) {
+    setManualIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  function finish() {
+    if (!selectedClient || !exerciseIds.length) return;
+    onSave(createTrainingProgram({
+      name: `${selectedClient.name.split(" ")[0]} · ${survey.goal}`,
+      category: survey.goal,
+      dayCount: Number(survey.days),
+      clientId: selectedClient.id,
+      exerciseIds,
+      duration: "8 tyg.",
+    }), selectedClient.id);
+  }
+
+  const shell = "fixed inset-0 z-[88] flex items-end justify-center bg-black/65 backdrop-blur-sm sm:items-center sm:p-5";
+  const sheet = "ui-sheet relative flex max-h-[92svh] w-full flex-col rounded-t-[28px] bg-[#f4f4f2] shadow-2xl sm:max-h-[88svh] sm:max-w-4xl sm:rounded-[30px]";
+
+  // ── Wybór sposobu tworzenia planu ──────────────────────────────────────
+  if (!path) {
+    const options: { id: PlanPath; title: string; text: string; bullets: string[]; icon: LucideIcon }[] = [
+      { id: "auto", title: "Generowany pod cel", text: "Podajesz cel i ankietę, resztę dobiera aplikacja.", bullets: ["Ćwiczenia dobrane do celu", "Gotowy plan w dwóch krokach", "Wszystko można później edytować"], icon: Sparkles },
+      { id: "manual", title: "Krok po kroku", text: "Sam wybierasz każde ćwiczenie z biblioteki.", bullets: ["Pełna kontrola nad doborem", "Wyszukiwarka i podpowiedzi", "Dłuższa ścieżka, cztery kroki"], icon: Dumbbell },
+    ];
+    return (
+      <div className={shell}>
+        <button className="absolute inset-0" onClick={onClose} aria-label="Zamknij" />
+        <section className={sheet}>
+          <header className="shrink-0 px-5 pt-4 sm:px-7 sm:pt-7">
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/15 sm:hidden" />
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/30">Nowy plan</p>
+                <h2 className="mt-1.5 text-2xl font-black tracking-[-0.04em]">Jak chcesz zbudować plan?</h2>
+              </div>
+              <button onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white" aria-label="Zamknij"><X size={16} /></button>
+            </div>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-7">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {options.map((option) => {
+                const Icon = option.icon;
+                return (
+                  <button key={option.id} onClick={() => setPath(option.id)} className={`${cardClass} flex flex-col p-5 text-left transition hover:border-black/25 sm:p-6`}>
+                    <span className="grid h-12 w-12 place-items-center rounded-2xl bg-black text-white"><Icon size={20} /></span>
+                    <span className="mt-5 block text-lg font-black">{option.title}</span>
+                    <span className="mt-1.5 block text-xs leading-5 text-black/45">{option.text}</span>
+                    <span className="mt-4 space-y-1.5">
+                      {option.bullets.map((bullet) => (
+                        <span key={bullet} className="flex gap-2 text-[11px] text-black/45"><Check size={13} className="mt-0.5 shrink-0" />{bullet}</span>
+                      ))}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  const canContinue = step === 0 ? Boolean(clientId) : true;
+  const canFinish = Boolean(selectedClient) && exerciseIds.length > 0;
+
+  return (
+    <div className={shell}>
+      <button className="absolute inset-0" onClick={onClose} aria-label="Zamknij" />
+      <section className={sheet}>
+        <header className="shrink-0 border-b border-black/[0.07] px-5 pt-4 sm:px-7 sm:pt-6">
+          <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/15 sm:hidden" />
+          <div className="flex items-start justify-between gap-3 pb-4">
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/30">
+                {path === "auto" ? "Plan generowany pod cel" : "Plan krok po kroku"} · krok {step + 1} z {steps.length}
+              </p>
+              <h2 className="mt-1.5 truncate text-xl font-black tracking-[-0.03em]">{steps[step]}</h2>
+            </div>
+            <button onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white" aria-label="Zamknij"><X size={16} /></button>
+          </div>
+          <div className="flex gap-1.5 pb-4">
+            {steps.map((label, index) => (
+              <span key={label} className={`h-1.5 flex-1 rounded-full ${index <= step ? "bg-black" : "bg-black/12"}`} />
+            ))}
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-7">
+          {steps[step] === "Podopieczny" ? (
+            <div>
+              <h3 className="text-xl font-black tracking-[-0.03em]">Dla kogo tworzysz plan?</h3>
+              <p className="mt-1.5 text-sm text-black/42">Cel i profil połączą się automatycznie z nowym planem.</p>
+              <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+                {clients.filter((client) => client.status !== "Wstrzymany").map((client) => (
+                  <button key={client.id} onClick={() => setClientId(client.id)} aria-pressed={clientId === client.id} className={`flex min-h-16 items-center gap-3 rounded-2xl border p-3.5 text-left transition ${clientId === client.id ? "border-black bg-black text-white" : "border-black/[0.07] bg-white"}`}>
+                    <Avatar initials={client.initials} dark={clientId === client.id} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-black">{client.name}</span>
+                      <span className={`mt-0.5 block truncate text-[11px] ${clientId === client.id ? "text-white/50" : "text-black/40"}`}>{client.goal}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {!clients.length ? <p className="mt-4 rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-xs text-black/38">Najpierw dodaj podopiecznego.</p> : null}
+            </div>
+          ) : null}
+
+          {steps[step] === "Ankieta" ? (
+            <div>
+              <h3 className="text-xl font-black tracking-[-0.03em]">Ankieta i założenia</h3>
+              <p className="mt-1.5 text-sm text-black/42">{path === "auto" ? "Na tej podstawie dobierzemy ćwiczenia." : "Odpowiedzi sterują podpowiedziami przy wyborze ćwiczeń."}</p>
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                {([
+                  ["goal", "Główny cel", ["Redukcja tkanki tłuszczowej", "Budowa siły", "Masa mięśniowa", "Sprawność ogólna", "Mobilność i powrót do ruchu"]],
+                  ["level", "Doświadczenie", ["Początkujący", "Średniozaawansowany", "Zaawansowany"]],
+                  ["days", "Dni treningowe w tygodniu", ["2", "3", "4", "5"]],
+                  ["duration", "Czas jednej sesji", ["30", "45", "60", "75"]],
+                  ["equipment", "Dostępny sprzęt", ["Pełna siłownia", "Hantle i ławka", "Masa ciała", "Domowa siłownia"]],
+                  ["preference", "Preferowany styl", ["Trening siłowy", "Trening funkcjonalny", "Obwody", "Spokojne tempo techniczne"]],
+                  ["recovery", "Sen i regeneracja", ["Słaba", "Przeciętna", "Dobra", "Bardzo dobra"]],
+                ] as [keyof typeof survey, string, string[]][]).map(([key, label, options]) => (
+                  <label key={key} className="block">
+                    <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-black/32">{label}</span>
+                    <select value={survey[key]} onChange={(event) => setField(key, event.target.value)} className="h-12 w-full rounded-xl border-0 bg-white px-3 text-sm font-bold outline-none">
+                      {options.map((option) => <option key={option}>{option}</option>)}
+                    </select>
+                  </label>
+                ))}
+                <label className="block sm:col-span-2">
+                  <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-black/32">Kontuzje, ograniczenia i zalecenia specjalisty</span>
+                  <textarea value={survey.limitations} onChange={(event) => setField("limitations", event.target.value)} className="min-h-24 w-full rounded-xl border-0 bg-white p-3.5 text-sm outline-none" placeholder="Np. ograniczenie zgięcia kolana, zalecenie fizjoterapeuty…" />
+                </label>
+              </div>
+            </div>
+          ) : null}
+
+          {steps[step] === "Ćwiczenia" ? (
+            <div>
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+                <div>
+                  <h3 className="text-xl font-black tracking-[-0.03em]">Dobierz ćwiczenia</h3>
+                  <p className="mt-1.5 text-sm text-black/42">{manualIds.length} wybranych{search ? "" : " · podpowiedzi pod cel"}</p>
+                </div>
+                <label className="flex h-12 items-center rounded-full bg-white px-4">
+                  <Search size={15} className="mr-2 shrink-0 text-black/28" />
+                  <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-full w-full min-w-0 bg-transparent text-sm outline-none sm:w-56" placeholder="Szukaj w bazie…" aria-label="Szukaj ćwiczenia" />
+                </label>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {visibleExercises.map((exercise) => {
+                  const active = manualIds.includes(exercise.id);
+                  return (
+                    <button key={exercise.id} onClick={() => toggleExercise(exercise.id)} aria-pressed={active} className={`overflow-hidden rounded-2xl border text-left transition ${active ? "border-black bg-black text-white" : "border-black/[0.07] bg-white"}`}>
+                      <ExerciseMotion pattern={exercise.pattern} compact />
+                      <span className="flex items-start gap-2 p-4">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-black">{exercise.name}</span>
+                          <span className={`mt-1 block truncate text-[10px] ${active ? "text-white/45" : "text-black/38"}`}>{exercise.muscle} · {exercise.equipment}</span>
+                        </span>
+                        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${active ? "bg-white text-black" : "bg-black/[0.06]"}`}>{active ? <Check size={14} /> : <Plus size={14} />}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {steps[step] === "Podsumowanie" ? (
+            <div>
+              <h3 className="text-xl font-black tracking-[-0.03em]">Plan gotowy do przypisania</h3>
+              <p className="mt-1.5 text-sm text-black/42">Wszystko można później zmienić w edytorze planu.</p>
+              <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_.8fr]">
+                <section className={`${cardClass} p-5 sm:p-6`}>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-black/30">Nowy plan</p>
+                  <h4 className="mt-2 text-xl font-black">{selectedClient?.name.split(" ")[0]} · {survey.goal}</h4>
+                  <div className="mt-5 grid grid-cols-3 gap-3">
+                    {[["Dni", `${survey.days} / tydz.`], ["Sesja", `${survey.duration} min`], ["Ćwiczenia", String(exerciseIds.length)]].map(([label, value]) => (
+                      <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase text-black/30">{label}</p><p className="mt-2 text-sm font-black">{value}</p></div>
+                    ))}
+                  </div>
+                  <dl className="mt-5 space-y-2.5">
+                    {[["Poziom", survey.level], ["Sprzęt", survey.equipment], ["Styl", survey.preference], ["Regeneracja", survey.recovery], ["Ograniczenia", survey.limitations || "Brak zgłoszonych"]].map(([label, value]) => (
+                      <div key={label} className="flex justify-between gap-4 border-b border-black/[0.06] pb-2.5 text-xs"><dt className="text-black/38">{label}</dt><dd className="text-right font-bold">{value}</dd></div>
+                    ))}
+                  </dl>
+                </section>
+                <section className="rounded-[24px] bg-black p-5 text-white sm:p-6">
+                  <Sparkles size={20} />
+                  <h4 className="mt-4 text-lg font-black">{path === "auto" ? "Dobrane automatycznie" : "Wybrane przez Ciebie"}</h4>
+                  <p className="mt-2 text-xs leading-5 text-white/45">
+                    {path === "auto"
+                      ? "Ćwiczenia dobraliśmy pod cel i liczbę dni treningowych."
+                      : "Plan powstanie z ćwiczeń, które wskazałeś w poprzednim kroku."}
+                  </p>
+                  <ul className="mt-4 space-y-2 text-xs text-white/50">
+                    {["Profil i cel podopiecznego", "Ankieta startowa i ograniczenia", "Portal podopiecznego i postępy"].map((item) => (
+                      <li key={item} className="flex gap-2"><Check size={14} className="mt-0.5 shrink-0 text-white" />{item}</li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-black/[0.07] px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-7">
+          <button
+            onClick={() => (step === 0 ? setPath(null) : setStep((current) => Math.max(0, current - 1)))}
+            className="h-12 rounded-full border border-black/12 px-5 text-[10px] font-black uppercase tracking-wider"
+          >
+            {step === 0 ? "Zmień sposób" : "Wstecz"}
+          </button>
+          {step < lastStep ? (
+            <button disabled={!canContinue} onClick={() => setStep((current) => Math.min(lastStep, current + 1))} className="h-12 rounded-full bg-black px-7 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-30">Dalej</button>
+          ) : (
+            <button disabled={!canFinish} onClick={finish} className="h-12 rounded-full bg-black px-7 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-30">Przypisz plan</button>
+          )}
+        </footer>
+      </section>
+    </div>
+  );
 }
 
 function ExercisesView() {
