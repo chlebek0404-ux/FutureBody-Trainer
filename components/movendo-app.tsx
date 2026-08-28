@@ -64,7 +64,7 @@ import { NutritionEditor, NutritionView } from "@/components/nutrition-plan";
 import { calculateTargets, complianceForDay, sumMeals, todayKey, type MealLog, type NutritionPlan } from "@/lib/nutrition";
 import { ClientWorkout } from "@/components/client-workout";
 import { exerciseLibrary, searchExercises, suggestExercises } from "@/lib/exercise-library";
-import { createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
+import { createTrainingDays, createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { enableSmoothWheelScroll } from "@/lib/smooth-scroll";
 import { buildPreviewWorkspace, isPreviewBuild, matchPreviewAccount, previewClientEmail, previewClientId, previewTrainerEmail } from "@/lib/preview-workspace";
@@ -1526,7 +1526,6 @@ function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onClose
       subtitle="Programy podopiecznych w jednym miejscu — bez duplikatów i zbędnych ekranów."
       action="Nowy plan"
       onAction={() => { setWizardPath(null); setWizardOpen(true); }}
-      secondary={<button onClick={() => { setWizardPath("auto"); setWizardOpen(true); }} className="h-11 rounded-full border border-black/10 bg-white px-4 text-[10px] font-black uppercase tracking-wider"><Library size={14} className="mr-2 inline"/>Użyj szablonu</button>}
     />
 
     <section className={`${cardClass} mb-4 grid gap-px overflow-hidden bg-black/[0.055] sm:grid-cols-3`}>
@@ -1583,6 +1582,12 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
   // Ścieżka automatyczna dobiera ćwiczenia z celu; ręczna korzysta z wyboru trenera.
   const autoIds = useMemo(() => suggestExercises(survey.goal, Number(survey.days) * 3).map((item) => item.id), [survey.goal, survey.days]);
   const exerciseIds = path === "auto" ? autoIds : manualIds;
+
+  // Podgląd planu: dokładnie ten sam rozkład, który zostanie zapisany.
+  const previewDays = useMemo(
+    () => (exerciseIds.length ? createTrainingDays(Number(survey.days), exerciseIds) : []),
+    [exerciseIds, survey.days],
+  );
 
   const steps = path === "manual"
     ? ["Podopieczny", "Ankieta", "Ćwiczenia", "Podsumowanie"]
@@ -1742,6 +1747,24 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
                   <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-full w-full min-w-0 bg-transparent text-sm outline-none sm:w-56" placeholder="Szukaj w bazie…" aria-label="Szukaj ćwiczenia" />
                 </label>
               </div>
+              {manualIds.length ? (
+                <div className="mt-4 rounded-2xl border border-black/[0.07] bg-white p-3.5">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-black/32">Wybrane ({manualIds.length})</p>
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {manualIds.map((id) => {
+                      const exercise = exerciseLibrary.find((item) => item.id === id);
+                      if (!exercise) return null;
+                      return (
+                        <button key={id} onClick={() => toggleExercise(id)} className="flex min-h-9 items-center gap-1.5 rounded-full bg-black px-3 text-[10px] font-black text-white" aria-label={`Usuń ${exercise.name} z wyboru`}>
+                          {exercise.name}
+                          <X size={12} className="opacity-60" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {visibleExercises.map((exercise) => {
                   const active = manualIds.includes(exercise.id);
@@ -1766,7 +1789,43 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
             <div>
               <h3 className="text-xl font-black tracking-[-0.03em]">Plan gotowy do przypisania</h3>
               <p className="mt-1.5 text-sm text-black/42">Wszystko można później zmienić w edytorze planu.</p>
-              <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_.8fr]">
+              <section className={`${cardClass} mt-5 overflow-hidden`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.06] p-5">
+                  <div>
+                    <h4 className="font-black">Ćwiczenia w planie</h4>
+                    <p className="mt-0.5 text-[11px] text-black/38">{exerciseIds.length} ćwiczeń w {previewDays.length} {previewDays.length === 1 ? "dniu" : "dniach"} — dokładnie to zostanie zapisane.</p>
+                  </div>
+                  {path === "manual" ? <button onClick={() => setStep(2)} className="h-11 rounded-full border border-black/12 px-4 text-[10px] font-black uppercase tracking-wider">Zmień wybór</button> : null}
+                </div>
+                <div className="divide-y divide-black/[0.055]">
+                  {previewDays.map((day) => (
+                    <div key={day.id} className="p-5">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <h5 className="text-sm font-black">{day.name}</h5>
+                        <span className="text-[10px] font-bold text-black/38">{day.focus} · {day.items.length} ćwiczeń</span>
+                      </div>
+                      <ol className="mt-3 space-y-2">
+                        {day.items.map((item, index) => {
+                          const exercise = exerciseLibrary.find((candidate) => candidate.id === item.exerciseId);
+                          return (
+                            <li key={item.id} className="flex items-center gap-3 rounded-xl bg-[#f3f3f1] px-3 py-2.5">
+                              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-black text-[10px] font-black text-white">{index + 1}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-xs font-black">{exercise?.name ?? "Ćwiczenie"}</span>
+                                <span className="mt-0.5 block truncate text-[10px] text-black/40">{exercise?.muscle} · {exercise?.equipment}</span>
+                              </span>
+                              <span className="shrink-0 text-[10px] font-black text-black/45">{item.sets} × {item.reps}</span>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </div>
+                  ))}
+                  {!previewDays.length ? <p className="px-5 py-10 text-center text-xs text-black/38">Nie wybrano jeszcze żadnego ćwiczenia.</p> : null}
+                </div>
+              </section>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_.8fr]">
                 <section className={`${cardClass} p-5 sm:p-6`}>
                   <p className="text-[9px] font-black uppercase tracking-wider text-black/30">Nowy plan</p>
                   <h4 className="mt-2 text-xl font-black">{selectedClient?.name.split(" ")[0]} · {survey.goal}</h4>

@@ -279,18 +279,50 @@ export const exerciseLibrary: ExerciseRecord[] = exerciseCatalog.map((entry, ind
 
 export const exerciseCategories = ["Wszystkie", ...exerciseGroups];
 
+/**
+ * Dobór ćwiczeń pod cel: bierzemy po jednej pozycji z każdego preferowanego
+ * wzorca ruchowego na zmianę, nie powtarzając rodziny, dopóki starcza materiału.
+ * Dzięki temu plan nie składa się z kilku wariantów tego samego ruchu.
+ */
 export function suggestExercises(goal: string, limit = 12) {
   const normalized = goal.toLowerCase();
   const preferredPatterns: MovementPattern[] = normalized.includes("mobil") || normalized.includes("ból")
-    ? ["mobility", "core", "hinge"]
-    : normalized.includes("sił") || normalized.includes("masa")
-      ? ["squat", "hinge", "push", "pull"]
-      : normalized.includes("redu") || normalized.includes("spraw")
-        ? ["squat", "lunge", "push", "pull", "core"]
-        : ["squat", "hinge", "push", "pull", "core", "mobility"];
+    ? ["mobility", "core", "hinge", "squat"]
+    : normalized.includes("sił")
+      ? ["squat", "hinge", "push", "pull", "core"]
+      : normalized.includes("masa")
+        ? ["push", "pull", "squat", "hinge", "lunge"]
+        : normalized.includes("redu") || normalized.includes("spraw")
+          ? ["squat", "push", "pull", "lunge", "core", "hinge"]
+          : ["squat", "hinge", "push", "pull", "core"];
 
-  const unique = exerciseLibrary.filter((item, index) => preferredPatterns.includes(item.pattern) && index % 17 === 0);
-  return unique.slice(0, limit);
+  const byPattern = new Map<MovementPattern, ExerciseRecord[]>();
+  for (const pattern of preferredPatterns) {
+    byPattern.set(pattern, exerciseLibrary.filter((item) => item.pattern === pattern && item.level !== "Zaawansowany"));
+  }
+
+  const picked: ExerciseRecord[] = [];
+  const usedGroups = new Set<string>();
+  let round = 0;
+
+  while (picked.length < limit && round < 12) {
+    let addedThisRound = false;
+    for (const pattern of preferredPatterns) {
+      if (picked.length >= limit) break;
+      const pool = byPattern.get(pattern) ?? [];
+      // W pierwszych rundach unikamy powtarzania partii, potem dobieramy resztę.
+      const candidate = pool.find((item) => !picked.includes(item) && (round > 0 || !usedGroups.has(item.muscle)))
+        ?? pool.find((item) => !picked.includes(item));
+      if (!candidate) continue;
+      picked.push(candidate);
+      usedGroups.add(candidate.muscle);
+      addedThisRound = true;
+    }
+    if (!addedThisRound) break;
+    round += 1;
+  }
+
+  return picked.slice(0, limit);
 }
 
 export type ExerciseFilters = {

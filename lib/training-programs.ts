@@ -59,11 +59,22 @@ export type WorkoutCompletion = {
   results: WorkoutExerciseResult[];
 };
 
+/** Krótki opis dnia zbudowany z partii ćwiczeń, które w nim są. */
+function describeDay(exerciseIds: string[]) {
+  const groups = exerciseIds
+    .map((id) => exerciseLibrary.find((exercise) => exercise.id === id)?.muscle)
+    .filter((group): group is string => Boolean(group));
+  const unique = Array.from(new Set(groups));
+  if (!unique.length) return "Trening";
+  if (unique.length <= 2) return unique.join(" i ");
+  return `${unique.slice(0, 2).join(", ")} i więcej`;
+}
+
 export function createTrainingDays(dayCount: number, exerciseIds: string[]): TrainingDay[] {
   const safeDayCount = Math.max(1, Math.min(dayCount, 7));
   const sourceIds = exerciseIds.length ? exerciseIds : exerciseLibrary.slice(0, 6).map((exercise) => exercise.id);
   const dayNames = Array.from({ length: 7 }, (_, index) => `Dzień ${index + 1}`);
-  const focuses = ["Siła całego ciała", "Góra ciała", "Dół ciała", "Technika i core", "Objętość", "Kondycja", "Mobilność"];
+
 
   return Array.from({ length: safeDayCount }, (_, dayIndex) => {
     const distributed = sourceIds.filter((_, exerciseIndex) => exerciseIndex % safeDayCount === dayIndex);
@@ -71,7 +82,8 @@ export function createTrainingDays(dayCount: number, exerciseIds: string[]): Tra
     return {
       id: `day-${dayIndex + 1}`,
       name: dayNames[dayIndex],
-      focus: focuses[dayIndex],
+      // Opis dnia wynika z partii, które faktycznie w nim są.
+      focus: describeDay(dayExercises),
       items: dayExercises.map((exerciseId, itemIndex) => {
         const exercise = exerciseLibrary.find((candidate) => candidate.id === exerciseId) ?? exerciseLibrary[0];
         return {
