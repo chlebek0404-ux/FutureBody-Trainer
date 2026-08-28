@@ -35,6 +35,17 @@ Projekt nie zawiera kont demonstracyjnych ani przykładowych zapisów użytkowni
 
 Moduły wyliczają wskaźniki wyłącznie z zapisanych danych. Dopóki nie ma zapisanych treningów i pomiarów, widoczne są stany puste zamiast wartości zastępczych.
 
+### Tryb podglądu
+
+Do recenzji interfejsu przed podłączeniem backendu służy tryb podglądu z dwoma kontami:
+
+| Rola | Adres e-mail | Hasło |
+| --- | --- | --- |
+| Trener | `demo@movendo.pl` | `demo1234` |
+| Podopieczny | `client@movendo.pl` | `demo1234` |
+
+Tryb wymaga jednocześnie dwóch warunków: braku konfiguracji Supabase oraz buildu developerskiego albo eksportu `pnpm export:html`. Produkcyjny `pnpm build` go nie udostępnia — sprawdzone uruchomieniem serwera produkcyjnego. Dane podglądu powstają w pamięci, nie trafiają do bazy i znikają po wylogowaniu.
+
 ## Uruchomienie developerskie
 
 Wymagany jest Node.js `22.13` lub nowszy oraz pnpm.

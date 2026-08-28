@@ -64,7 +64,8 @@ import { ClientWorkout } from "@/components/client-workout";
 import { exerciseLibrary, searchExercises, suggestExercises } from "@/lib/exercise-library";
 import { createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
 import { downloadMovendoPdf } from "@/lib/pdf-export";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
+import { buildPreviewWorkspace, isPreviewBuild, matchPreviewAccount, previewClientEmail, previewClientId, previewTrainerEmail } from "@/lib/preview-workspace";
 import { loadAccountSession, restoreAccountSession, type AccountRole, type AccountSession } from "@/lib/session";
 
 type View =
@@ -172,6 +173,7 @@ type LoginScreenProps = {
   onResetPassword: (email: string) => Promise<string | null>;
   onValidateCode: (code: string) => Promise<{ info?: ActivationInfo; error?: string }>;
   onActivateClient: (info: ActivationInfo, email: string, password: string) => Promise<string | null>;
+  showPreviewAccounts?: boolean;
 };
 
 function FutureBodySplash() {
@@ -181,7 +183,7 @@ function FutureBodySplash() {
   </main>;
 }
 
-function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPassword, onValidateCode, onActivateClient }: LoginScreenProps) {
+function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPassword, onValidateCode, onActivateClient, showPreviewAccounts = false }: LoginScreenProps) {
   const normalizedInitialCode = initialCode.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
   const [mode, setMode] = useState<AuthMode>(normalizedInitialCode ? "code" : "login");
   const [email, setEmail] = useState("");
@@ -301,6 +303,21 @@ function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPass
               <p className="mt-5 text-center text-[11px] text-black/38">Nie masz konta? <button onClick={() => changeMode("trainer-register")} className="font-black text-black">Zarejestruj się jako trener</button></p>
               <div className="my-6 h-px bg-black/[0.07]" />
               <div className="text-center"><p className="text-xs font-black">Jesteś podopiecznym?</p><p className="mt-1 text-[10px] text-black/35">Aktywuj konto kodem otrzymanym od trenera.</p><button onClick={() => changeMode("code")} className="mt-4 h-11 w-full rounded-full border border-black/12 text-[10px] font-black uppercase tracking-[0.09em] transition hover:bg-black hover:text-white">Mam kod od trenera</button></div>
+              {showPreviewAccounts ? (
+                <div className="mt-6 rounded-2xl border border-dashed border-black/12 bg-[#f7f7f5] p-4">
+                  <p className="text-[9px] font-black uppercase tracking-[0.12em] text-black/40">Tryb podglądu · tylko do recenzji</p>
+                  <p className="mt-2 text-[10px] leading-4 text-black/45">Baza nie jest podłączona. Te konta służą wyłącznie do przeglądania interfejsu i nie istnieją w buildzie produkcyjnym.</p>
+                  <div className="mt-3 space-y-2">
+                    {[["Trener", previewTrainerEmail], ["Podopieczny", previewClientEmail]].map(([label, address]) => (
+                      <button key={address} type="button" onClick={() => { setEmail(address); setPassword("demo1234"); }} className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2.5 text-left transition hover:bg-black hover:text-white">
+                        <span className="min-w-0"><span className="block text-[9px] font-black uppercase tracking-wider opacity-50">{label}</span><span className="block truncate text-[11px] font-bold">{address}</span></span>
+                        <span className="shrink-0 text-[9px] font-black uppercase tracking-wider opacity-60">Wypełnij</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[9px] text-black/32">Hasło dla obu kont: <strong className="font-black text-black/55">demo1234</strong></p>
+                </div>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -441,6 +458,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const [invitations, setInvitations] = useState<ClientInvitation[]>(() => readStoredJson("futurebody_invitations", []));
   const [inviteDialog, setInviteDialog] = useState<ClientInvitation | null>(null);
   const [clientSession, setClientSession] = useState<Client | null>(null);
+  const [previewMode, setPreviewMode] = useState(false);
   const [appointments, setAppointments] = useState<CalendarAppointment[]>(() => readStoredJson("movendo_calendar_history", []));
   const [workoutPlans, setWorkoutPlans] = useState<TrainingProgram[]>(readStoredPlans);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutCompletion[]>(() => readStoredJson("futurebody_workout_history", []));
@@ -589,10 +607,36 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.setTimeout(() => setToast(null), 2600);
   }
 
+  // Wejście do trybu podglądu. Nieosiągalne przy skonfigurowanym Supabase
+  // oraz w buildzie produkcyjnym — patrz `isPreviewBuild`.
+  function loginToPreview(email: string, password: string) {
+    if (!isPreviewBuild()) return "Logowanie zostanie uruchomione po podłączeniu bezpiecznej bazy danych.";
+    const previewRole = matchPreviewAccount(email, password);
+    if (!previewRole) return "Baza nie jest podłączona. Użyj konta podglądu albo skonfiguruj Supabase.";
+    const workspace = buildPreviewWorkspace();
+    setClients(workspace.clients);
+    setTasks(workspace.tasks);
+    setWorkoutPlans(workspace.plans);
+    setAppointments(workspace.appointments);
+    setInvitations(workspace.invitations);
+    setTrainerNotifications([
+      { id: "preview-note-1", title: "Nowy check-in", detail: "Anna Kowalska przesłała pomiary tygodniowe.", view: "checkins", read: false },
+      { id: "preview-note-2", title: "Plan do przygotowania", detail: "Julia Wrona czeka na pierwszy plan treningowy.", view: "plans", read: false },
+    ]);
+    setPreviewMode(true);
+    if (previewRole === "client") {
+      setClientSession(workspace.clients.find((client) => client.id === previewClientId) ?? null);
+      setRole("client");
+      return null;
+    }
+    setRole("trainer");
+    return null;
+  }
+
   async function login(email: string, password: string) {
     if (!email || !password) return "Uzupełnij adres e-mail i hasło.";
     const supabase = getSupabaseBrowserClient();
-    if (!supabase) return "Logowanie zostanie uruchomione po podłączeniu bezpiecznej bazy danych.";
+    if (!supabase) return loginToPreview(email, password);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return "Nie udało się zalogować. Sprawdź dane i spróbuj ponownie.";
     const pendingInvitation = window.localStorage.getItem("movendo_pending_invitation");
@@ -671,6 +715,16 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   async function logout() {
     const supabase = getSupabaseBrowserClient();
     if (supabase) await supabase.auth.signOut();
+    if (previewMode) {
+      setPreviewMode(false);
+      setClients([]);
+      setTasks([]);
+      setWorkoutPlans([]);
+      setAppointments([]);
+      setInvitations([]);
+      setWorkoutHistory([]);
+      setTrainerNotifications([]);
+    }
     setRole(null);
     setClientSession(null);
     setActiveView("dashboard");
@@ -912,9 +966,9 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const focusedFlow = Boolean(trainerWorkout || selectedPlanId);
 
   if (booting) return <FutureBodySplash/>;
-  if (!role) return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} />;
-  if (role === "client" && clientSession) return <ClientPortal client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} />;
-  if (role === "client") return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} />;
+  if (!role) return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
+  if (role === "client" && clientSession) return <ClientPortal client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} previewMode={previewMode} />;
+  if (role === "client") return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
 
   return (
     <div className="futurebody-app min-h-[100svh] bg-[#050505] text-[#f7f7f7]">
@@ -957,8 +1011,9 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
             </nav>
           ) : null}
         </div>
+        {previewMode ? <p className="mb-2 rounded-[14px] border border-dashed border-[#ffc400]/35 bg-[#ffc400]/[0.07] px-3 py-2 text-[9px] font-black uppercase tracking-[0.11em] text-[#ffc400]">Tryb podglądu · dane tylko do recenzji</p> : null}
         <div className="rounded-[18px] border border-white/[0.07] bg-[#111214] p-3">
-          <div className="flex items-center gap-3"><Avatar initials="TR" size="sm" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">Konto trenera</p><p className="truncate text-[9px] text-white/35">Trener</p></div><button onClick={logout} className="text-white/35 hover:text-white" aria-label="Wyloguj"><LogOut size={16} /></button></div>
+          <div className="flex items-center gap-3"><Avatar initials="TR" size="sm" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">Konto trenera</p><p className="truncate text-[9px] text-white/35">{previewMode ? "Konto podglądu" : "Trener"}</p></div><button onClick={logout} className="text-white/35 hover:text-white" aria-label="Wyloguj"><LogOut size={16} /></button></div>
         </div>
       </aside>
 
@@ -1445,6 +1500,7 @@ function ClientPortal({
   onComplete,
   onLogout,
   notify,
+  previewMode = false,
 }: {
   client: Client;
   program?: TrainingProgram;
@@ -1452,6 +1508,7 @@ function ClientPortal({
   onComplete: (completion: WorkoutCompletion) => void;
   onLogout: () => void;
   notify: (text: string) => void;
+  previewMode?: boolean;
 }) {
   const [tab, setTab] = useState<"today" | "plan" | "progress" | "messages" | "profile">("today");
   const [activeWorkoutDayId, setActiveWorkoutDayId] = useState<string | null>(null);
@@ -1463,7 +1520,7 @@ function ClientPortal({
     { id: "profile", label: "Profil", icon: Users },
   ];
   if (!program) {
-    return <div className="futurebody-app min-h-[100svh] bg-[#050505] text-[#f7f7f7]"><header className="fb-dark-surface flex h-[72px] items-center border-b border-white/[0.07] px-4 text-white"><img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover"/><div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">Panel podopiecznego</p></div><button onClick={onLogout} className="ml-auto grid h-10 w-10 place-items-center rounded-full border border-white/10" aria-label="Wyloguj"><LogOut size={15}/></button></header><main className="grid min-h-[calc(100svh-72px)] place-items-center px-5 py-10"><section className={`${cardClass} w-full max-w-lg p-7 text-center sm:p-10`}><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-black text-white"><Dumbbell size={22}/></span><h1 className="mt-6 text-2xl font-black tracking-[-0.04em]">Plan jest w przygotowaniu</h1><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-black/42">Twój trener nie przypisał jeszcze aktywnego programu. Gdy plan będzie gotowy, pojawi się tutaj automatycznie.</p><button onClick={() => notify("Wiadomość do trenera została przygotowana")} className="mt-6 h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase text-white">Napisz do trenera</button></section></main></div>;
+    return <div className="futurebody-app min-h-[100svh] bg-[#050505] text-[#f7f7f7]"><header className="fb-dark-surface flex h-[72px] items-center border-b border-white/[0.07] px-4 text-white"><img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover"/><div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">{previewMode ? "Tryb podglądu" : "Panel podopiecznego"}</p></div><button onClick={onLogout} className="ml-auto grid h-10 w-10 place-items-center rounded-full border border-white/10" aria-label="Wyloguj"><LogOut size={15}/></button></header><main className="grid min-h-[calc(100svh-72px)] place-items-center px-5 py-10"><section className={`${cardClass} w-full max-w-lg p-7 text-center sm:p-10`}><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-black text-white"><Dumbbell size={22}/></span><h1 className="mt-6 text-2xl font-black tracking-[-0.04em]">Plan jest w przygotowaniu</h1><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-black/42">Twój trener nie przypisał jeszcze aktywnego programu. Gdy plan będzie gotowy, pojawi się tutaj automatycznie.</p><button onClick={() => notify("Wiadomość do trenera została przygotowana")} className="mt-6 h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase text-white">Napisz do trenera</button></section></main></div>;
   }
   const activeWorkoutDay = program.trainingDays.find((day) => day.id === activeWorkoutDayId);
   const todayDay = program.trainingDays[0];

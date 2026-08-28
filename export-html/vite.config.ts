@@ -76,6 +76,9 @@ export default defineConfig({
   base: "./",
   css: { postcss: { plugins: [tailwindcss()] } },
   resolve: { alias: { "@": projectRoot } },
+  // Eksport HTML powstaje po to, żeby recenzować interfejs bez backendu,
+  // więc jako jedyny build włącza tryb podglądu.
+  define: { "process.env.NEXT_PUBLIC_PREVIEW_MODE": JSON.stringify("1") },
   plugins: [embedLogo(), embedExerciseVisuals(), react(), createStandaloneHtml()],
   build: {
     outDir: buildRoot,

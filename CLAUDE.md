@@ -44,7 +44,10 @@ Skopiuj `.env.example` do `.env.local` i uzupełnij wartości Supabase. Sekrety 
 ## Aktualny stan
 
 - po uruchomieniu aplikacja pokazuje splash i pusty ekran logowania;
-- nie ma kont testowych ani przykładowych rekordów użytkowników;
+- nie ma kont testowych ani przykładowych rekordów użytkowników na produkcji;
+- istnieje tryb podglądu do recenzji interfejsu (`lib/preview-workspace.ts`),
+  wymagający jednocześnie braku Supabase oraz buildu developerskiego albo
+  eksportu HTML; produkcyjny `vinext build` go nie udostępnia;
 - logowanie nie omija Supabase;
 - rola konta pochodzi wyłącznie z sesji Supabase, nie z `localStorage`;
 - sesja jest odtwarzana przy starcie, a wylogowanie i wygaśnięcie tokenu zamykają panel;
@@ -56,7 +59,10 @@ Skopiuj `.env.example` do `.env.local` i uzupełnij wartości Supabase. Sekrety 
 
 - rozwijaj istniejące komponenty inkrementalnie;
 - zachowuj routing i główne przepływy produktu;
-- nie przywracaj automatycznego logowania ani kont demonstracyjnych;
+- nie przywracaj automatycznego logowania; konta podglądu wymagają podania
+  danych i nie mogą być dostępne w buildzie produkcyjnym;
+- nie rozszerzaj trybu podglądu poza recenzję interfejsu i nie zapisuj jego
+  danych do bazy;
 - nie przywracaj przykładowych klientów, planów, wiadomości, check-inów
   ani kalendarza; pusty stan jest poprawnym stanem;
 - nie pokazuj wyliczeń, których nie da się wyprowadzić z zapisanych danych;
