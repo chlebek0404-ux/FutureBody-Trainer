@@ -4,6 +4,7 @@ import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState
 import {
   Activity,
   Apple,
+  Download,
   BarChart3,
   Bell,
   BookOpen,
@@ -65,6 +66,7 @@ import { exerciseLibrary, searchExercises, suggestExercises } from "@/lib/exerci
 import { createTrainingDays, createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { enableSmoothWheelScroll } from "@/lib/smooth-scroll";
+import { initPwa, type PwaState } from "@/lib/pwa";
 import { buildPreviewWorkspace, isPreviewBuild, matchPreviewAccount, previewClientEmail, previewClientId, previewTrainerEmail } from "@/lib/preview-workspace";
 import { loadAccountSession, restoreAccountSession, type AccountRole, type AccountSession } from "@/lib/session";
 
@@ -529,8 +531,15 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const [inviteDialog, setInviteDialog] = useState<ClientInvitation | null>(null);
   const [clientSession, setClientSession] = useState<Client | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
+  // Aplikacja żyje w czasie: co minutę przelicza „dziś", najbliższy trening
+  // i powitanie. Bez tego panel otwarty rano pokazywałby ranek do wieczora.
+  const [now, setNow] = useState(() => new Date());
+
   const [handoff, setHandoff] = useState(false);
   const [trainerProfile, setTrainerProfile] = useState<TrainerProfile>(readTrainerProfile);
+  const [pwa, setPwa] = useState<PwaState>({ canInstall: false, installed: false, isIos: false, updateReady: false, offline: false });
+  const [installHidden, setInstallHidden] = useState(false);
+  const pwaRef = useRef<ReturnType<typeof initPwa> | null>(null);
   const [nutritionPlans, setNutritionPlans] = useState<NutritionPlan[]>(() => readStoredJson("futurebody_nutrition_plans", []));
   const [mealLogs, setMealLogs] = useState<MealLog[]>(() => readStoredJson("futurebody_meal_logs", []));
   const [nutritionClientId, setNutritionClientId] = useState<string | null>(null);
@@ -673,10 +682,22 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     return () => data.subscription.unsubscribe();
   }, [applySession]);
 
+  useEffect(() => {
+    // Pierwsze przeliczenie na pełnej minucie, potem co minutę.
+    let interval = 0;
+    const timeout = window.setTimeout(() => {
+      setNow(new Date());
+      interval = window.setInterval(() => setNow(new Date()), 60_000);
+    }, (60 - new Date().getSeconds()) * 1000);
+    return () => { window.clearTimeout(timeout); if (interval) window.clearInterval(interval); };
+  }, []);
+
   useEffect(() => enableSmoothWheelScroll(), []);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    const controls = initPwa((next) => setPwa((current) => ({ ...current, ...next })));
+    pwaRef.current = controls;
+    return controls.cleanup;
   }, []);
 
   useEffect(() => {
@@ -1189,7 +1210,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
             <div className="flex items-center gap-2.5 rounded-[16px] border border-white/[0.07] bg-[#111214] px-4 py-2.5"><Search size={16} className="text-white/30" /><input ref={searchInputRef} value={query} onFocus={() => setSearchFocused(true)} onChange={(event) => { setQuery(event.target.value); setSearchFocused(true); }} placeholder="Szukaj podopiecznego, planu, zadania…" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/28" /><span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/30">Ctrl K</span></div>
             {searchFocused && query.trim() ? <div className="ui-popover absolute left-0 right-0 top-[52px] z-50 overflow-hidden rounded-[22px] border border-black/10 bg-white p-2 shadow-2xl"><p className="px-3 py-2 text-[8px] font-black uppercase tracking-wider text-black/30">Wyniki wyszukiwania</p>{searchResults.length ? searchResults.map((result) => { const Icon = result.icon; return <button key={result.id} onMouseDown={(event) => event.preventDefault()} onClick={() => openSearchResult(result)} className="flex w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-[#f3f3f1]"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><Icon size={14} /></span><span className="min-w-0"><span className="block truncate text-xs font-black">{result.title}</span><span className="block truncate text-[9px] text-black/38">{result.detail}</span></span></button>; }) : <div className="px-3 py-6 text-center text-xs text-black/38">Brak wyników. Spróbuj innego hasła.</div>}</div> : null}
           </div>
-          <div className="ml-auto flex items-center gap-2"><span className="hidden text-right sm:block"><span className="block text-[11px] font-bold">{new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long" }).format(new Date())}</span><span className="block text-[9px] text-white/34">Warszawa</span></span><div className="relative"><button onClick={() => { setNotificationsOpen((current) => !current); setSearchFocused(false); }} aria-expanded={notificationsOpen} className="relative grid h-11 w-11 place-items-center rounded-[14px] border border-white/[0.07] bg-[#111214]" aria-label="Powiadomienia"><Bell size={17} />{trainerNotifications.some((item) => !item.read) ? <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#ffc400] ring-2 ring-[#111214]" /> : null}</button></div><button onClick={() => navigate("settings")} aria-label="Ustawienia konta"><Avatar initials={profileInitials(trainerProfile)} size="sm" dark /></button></div>
+          <div className="ml-auto flex items-center gap-2"><span className="hidden text-right sm:block"><span className="block text-[15px] font-black leading-none tabular-nums">{new Intl.DateTimeFormat("pl-PL", { hour: "2-digit", minute: "2-digit" }).format(now)}</span><span className="mt-1 block text-[9px] capitalize text-white/34">{new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long" }).format(now)}</span></span><div className="relative"><button onClick={() => { setNotificationsOpen((current) => !current); setSearchFocused(false); }} aria-expanded={notificationsOpen} className="relative grid h-11 w-11 place-items-center rounded-[14px] border border-white/[0.07] bg-[#111214]" aria-label="Powiadomienia"><Bell size={17} />{trainerNotifications.some((item) => !item.read) ? <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#ffc400] ring-2 ring-[#111214]" /> : null}</button></div><button onClick={() => navigate("settings")} aria-label="Ustawienia konta"><Avatar initials={profileInitials(trainerProfile)} size="sm" dark /></button></div>
         </header>
 
         {!focusedFlow ? <button onClick={() => setSearchFocused(true)} className="fixed right-[7.5rem] top-[max(.85rem,env(safe-area-inset-top))] z-40 grid h-11 w-11 place-items-center rounded-[14px] border border-white/[0.07] bg-[#111214] text-white sm:hidden" aria-label="Otwórz wyszukiwanie"><Search size={17}/></button> : null}
@@ -1222,7 +1243,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
               notify={notify}
             />
           ) : (
-            <ViewRenderer view={activeView} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} onAddWorkout={openScheduling} calendarIntent={calendarIntent} planIntentClientId={planIntentClientId} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={(type) => setModal({ type })} notify={notify} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
+            <ViewRenderer view={activeView} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} now={now} onAddWorkout={openScheduling} calendarIntent={calendarIntent} planIntentClientId={planIntentClientId} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={(type) => setModal({ type })} notify={notify} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
           )}
           </div>
         </main>
@@ -1234,6 +1255,47 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
       </nav> : null}
 
       {notificationsOpen ? <><button className="fixed inset-0 z-[85] bg-black/50 sm:hidden" onClick={() => setNotificationsOpen(false)} aria-label="Zamknij powiadomienia"/><div className="ui-popover fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[90] max-h-[70svh] overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#111214] shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-13 sm:w-[min(360px,calc(100vw-32px))]"><div className="flex items-center justify-between border-b border-white/[0.07] p-4"><div><p className="text-sm font-black">Powiadomienia</p><p className="text-[9px] text-white/35">{trainerNotifications.filter((item) => !item.read).length} nieprzeczytane</p></div><button onClick={() => setTrainerNotifications((current) => current.map((item) => ({ ...item, read: true })))} className="text-[8px] font-black uppercase tracking-wider text-[#ffc400]">Oznacz wszystkie</button></div><div className="max-h-[46svh] overflow-y-auto p-2 sm:max-h-[360px]">{trainerNotifications.map((item) => <button key={item.id} onClick={() => openTrainerNotification(item)} className={`flex min-h-16 w-full gap-3 rounded-2xl p-3 text-left transition ${item.read ? "opacity-45" : "bg-white/[0.045]"} hover:bg-white/[0.08]`}><span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${item.read ? "bg-white/15" : "bg-[#ffc400]"}`} /><span><span className="block text-xs font-black">{item.title}</span><span className="mt-1 block text-[9px] leading-4 text-white/40">{item.detail}</span></span></button>)}</div><button onClick={enablePhoneNotifications} className="flex w-full items-center justify-center gap-2 border-t border-white/[0.07] px-4 py-3 text-[9px] font-black uppercase tracking-wider"><Bell size={13} />Włącz powiadomienia telefonu</button></div></> : null}
+      {/* Aktualizacja ma pierwszeństwo: nowa wersja czeka na przeładowanie. */}
+      {pwa.updateReady ? (
+        <div role="status" className="fixed inset-x-3 bottom-[max(6.5rem,calc(env(safe-area-inset-bottom)+6rem))] z-[92] mx-auto flex max-w-sm items-center gap-3 rounded-[18px] border border-[var(--fb-border)] bg-[var(--fb-surface-2)] p-3 pl-4 shadow-2xl sm:inset-x-auto sm:right-4 sm:bottom-6 sm:mx-0">
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-black">Nowa wersja gotowa</span>
+            <span className="mt-0.5 block text-[10px] text-[var(--fb-text-muted)]">Odśwież, aby ją uruchomić.</span>
+          </span>
+          <button onClick={() => pwaRef.current?.applyUpdate()} className="fb-btn fb-btn-primary !min-h-10 !px-4">Odśwież</button>
+        </div>
+      ) : null}
+
+      {/* Zaproszenie do instalacji — tylko poza aplikacją zainstalowaną. */}
+      {!pwa.installed && !installHidden && (pwa.canInstall || pwa.isIos) ? (
+        <div className="fixed inset-x-3 bottom-[max(6.5rem,calc(env(safe-area-inset-bottom)+6rem))] z-[91] mx-auto max-w-sm rounded-[20px] border border-[var(--fb-border)] bg-[var(--fb-surface-2)] p-4 shadow-2xl sm:inset-x-auto sm:right-4 sm:bottom-6 sm:mx-0">
+          <div className="flex items-start gap-3">
+            <img src="/futurebody-logo.png" alt="" aria-hidden="true" className="h-10 w-10 shrink-0 rounded-[12px] object-cover" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-black">Zainstaluj na telefonie</p>
+              <p className="mt-1 text-[10px] leading-4 text-[var(--fb-text-muted)]">
+                {pwa.isIos && !pwa.canInstall
+                  ? "W Safari otwórz Udostępnij, a następnie Dodaj do ekranu początkowego."
+                  : "Aplikacja uruchomi się bez paska przeglądarki i zadziała bez zasięgu."}
+              </p>
+            </div>
+            <button onClick={() => setInstallHidden(true)} aria-label="Zamknij" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--fb-glass-strong)] text-[var(--fb-text-muted)]"><X size={14} /></button>
+          </div>
+          {pwa.canInstall ? (
+            <button onClick={async () => { const ok = await pwaRef.current?.install(); if (ok) notify("Aplikacja zainstalowana"); }} className="fb-btn fb-btn-primary mt-3 w-full">
+              <Download size={15} />Zainstaluj
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Praca bez zasięgu — zapisy zostają na urządzeniu. */}
+      {pwa.offline ? (
+        <div role="status" className="fixed inset-x-0 top-0 z-[94] bg-[var(--fb-warning)] px-4 py-2 text-center text-[11px] font-black text-[#0c0c0f]">
+          Brak połączenia — pracujesz na danych zapisanych na urządzeniu
+        </div>
+      ) : null}
+
       {modal.type ? <ActionModal type={modal.type} clients={clients} presetClient={clients.find((client) => client.id === modal.clientId) ?? null} onClose={() => setModal({ type: null })} onSave={(payload) => {
         if (modal.type === "measurement") { saveMeasurement(payload); setModal({ type: null }); return; }
         if (modal.type === "client" && payload.name) {
@@ -1253,7 +1315,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
 function ViewRenderer(props: {
   view: View; clients: Client[]; setClients: React.Dispatch<React.SetStateAction<Client[]>>; query: string; onClient: (id: string) => void;
   onStartWorkout: (clientId: string) => void; onOpenPlan: (planId: string) => void; onNavigate: (view: View) => void;
-  selectedPlanId: string | null; onAddWorkout: () => void; calendarIntent: boolean; planIntentClientId: string | null;
+  selectedPlanId: string | null; onAddWorkout: () => void; calendarIntent: boolean; planIntentClientId: string | null; now: Date;
   tasks: typeof initialTasks; setTasks: React.Dispatch<React.SetStateAction<typeof initialTasks>>; onModal: (type: ModalType) => void; notify: (text: string) => void;
   appointments: CalendarAppointment[]; onSchedule: (input: { id?: string; date: string; hour: number; clientId: string }) => void;
   onCancelAppointment: (id: string) => void; onDeleteAppointment: (id: string) => void;
@@ -1266,7 +1328,7 @@ function ViewRenderer(props: {
   onSaveNutrition: (plan: NutritionPlan) => void; onDeleteNutrition: (clientId: string) => void;
 }) {
   switch (props.view) {
-    case "dashboard": return <Dashboard clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
+    case "dashboard": return <Dashboard now={props.now} clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
     case "clients": return <ClientsView clients={props.clients} query={props.query} onClient={props.onClient} onAdd={() => props.onModal("client")} />;
     case "calendar": return <CalendarView clients={props.clients} appointments={props.appointments} onSchedule={props.onSchedule} onOpenClient={props.onClient} onStartWorkout={props.onStartWorkout} onCancel={props.onCancelAppointment} onDelete={props.onDeleteAppointment} autoSchedule={props.calendarIntent} />;
     case "plans": return <PlansView clients={props.clients} workoutPlans={props.workoutPlans} initialPlanId={props.selectedPlanId} onOpenDetail={props.onOpenPlan} onCloseDetail={() => props.onNavigate("plans")} onSavePlan={props.onSavePlan} onUpdatePlan={props.onUpdatePlan} notify={props.notify} planIntentClientId={props.planIntentClientId} />;
@@ -1283,9 +1345,9 @@ function ViewRenderer(props: {
   }
 }
 
-function Dashboard({ clients, appointments, nutritionPlans, mealLogs, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { clients: Client[]; appointments: CalendarAppointment[]; nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
-  const today = appointments.filter((item) => item.date === dateKey(new Date())).sort((a, b) => a.hour - b.hour);
-  const nextAppointment = today.find((item) => item.hour >= new Date().getHours()) ?? today[0];
+function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { now: Date; clients: Client[]; appointments: CalendarAppointment[]; nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
+  const today = appointments.filter((item) => item.date === dateKey(now)).sort((a, b) => a.hour - b.hour);
+  const nextAppointment = today.find((item) => item.hour >= now.getHours()) ?? today[0];
   const nextClient = nextAppointment ? clients.find((client) => client.id === nextAppointment.clientId) ?? null : null;
   const clientsWithoutPlan = clients.filter((client) => client.plan === "Brak planu");
   const clientsWithoutDiet = clients.filter((client) => !nutritionPlans.some((plan) => plan.clientId === client.id));
@@ -1297,9 +1359,9 @@ function Dashboard({ clients, appointments, nutritionPlans, mealLogs, onModal, o
       }, 0) / clientsWithDiet.length)
     : null;
 
-  const hour = new Date().getHours();
+  const hour = now.getHours();
   const greeting = hour < 5 ? "Dobrej nocy." : hour < 12 ? "Dzień dobry." : hour < 18 ? "Dobre popołudnie." : "Dobry wieczór.";
-  const dateLabel = new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+  const dateLabel = new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long" }).format(now);
 
   const stats: { label: string; value: string; hint?: string }[] = [
     { label: "Treningi dziś", value: String(today.length) },
