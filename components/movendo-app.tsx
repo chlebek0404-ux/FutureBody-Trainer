@@ -3,6 +3,7 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
+  Apple,
   BarChart3,
   Bell,
   BookOpen,
@@ -13,7 +14,6 @@ import {
   CheckSquare,
   ChevronLeft,
   ChevronRight,
-  Circle,
   Download,
   Dumbbell,
   Eye,
@@ -61,6 +61,8 @@ import {
 import ExerciseMotion from "@/components/exercise-motion";
 import ExerciseLibraryPanel from "@/components/exercise-library-panel";
 import { PlanEditor } from "@/components/training-plan";
+import { NutritionEditor, NutritionView } from "@/components/nutrition-plan";
+import { calculateTargets, complianceForDay, sumMeals, todayKey, type MealLog, type NutritionPlan } from "@/lib/nutrition";
 import { ClientWorkout } from "@/components/client-workout";
 import { exerciseLibrary, searchExercises, suggestExercises } from "@/lib/exercise-library";
 import { createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
@@ -79,7 +81,7 @@ type View =
   | "progress"
   | "checkins"
   | "messages"
-  | "tasks"
+  | "nutrition"
   | "automations"
   | "materials"
   | "reports"
@@ -101,7 +103,7 @@ const secondaryNavigation: NavigationItem[] = [
   { id: "progress", label: "Postępy", icon: TrendingUp },
   { id: "checkins", label: "Check-iny", icon: CheckSquare },
   { id: "messages", label: "Wiadomości", icon: MessageCircle, count: 3 },
-  { id: "tasks", label: "Zadania", icon: CheckCircle2, count: 4 },
+  { id: "nutrition", label: "Dieta", icon: Apple },
   { id: "reports", label: "Raporty", icon: BarChart3 },
   { id: "materials", label: "Materiały", icon: FolderOpen },
   { id: "automations", label: "Automatyzacje", icon: Zap },
@@ -500,6 +502,9 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const [previewMode, setPreviewMode] = useState(false);
   const [handoff, setHandoff] = useState(false);
   const [trainerProfile, setTrainerProfile] = useState<TrainerProfile>(readTrainerProfile);
+  const [nutritionPlans, setNutritionPlans] = useState<NutritionPlan[]>(() => readStoredJson("futurebody_nutrition_plans", []));
+  const [mealLogs, setMealLogs] = useState<MealLog[]>(() => readStoredJson("futurebody_meal_logs", []));
+  const [nutritionClientId, setNutritionClientId] = useState<string | null>(null);
   const handoffTimer = useRef<number | null>(null);
   const [calendarIntent, setCalendarIntent] = useState(false);
   const [appointments, setAppointments] = useState<CalendarAppointment[]>(() => readStoredJson("movendo_calendar_history", []));
@@ -655,7 +660,9 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.localStorage.setItem("futurebody_plans", JSON.stringify(workoutPlans));
     window.localStorage.setItem("futurebody_workout_history", JSON.stringify(workoutHistory));
     window.localStorage.setItem("futurebody_invitations", JSON.stringify(invitations));
-  }, [clients, invitations, tasks, workoutHistory, workoutPlans]);
+    window.localStorage.setItem("futurebody_nutrition_plans", JSON.stringify(nutritionPlans));
+    window.localStorage.setItem("futurebody_meal_logs", JSON.stringify(mealLogs));
+  }, [clients, invitations, mealLogs, nutritionPlans, tasks, workoutHistory, workoutPlans]);
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -676,6 +683,39 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   function updateTrainerProfile(next: TrainerProfile) {
     setTrainerProfile(next);
     window.localStorage.setItem("futurebody_trainer_profile", JSON.stringify(next));
+  }
+
+  function openNutrition(clientId: string) {
+    setNutritionClientId(clientId);
+    setActiveView("nutrition");
+    scrollToTop();
+  }
+
+  function saveNutritionPlan(plan: NutritionPlan) {
+    setNutritionPlans((current) => [...current.filter((item) => item.clientId !== plan.clientId), plan]);
+    setNutritionClientId(null);
+    notify("Plan żywieniowy zapisany");
+    scrollToTop();
+  }
+
+  function deleteNutritionPlan(clientId: string) {
+    setNutritionPlans((current) => current.filter((plan) => plan.clientId !== clientId));
+    setMealLogs((current) => current.filter((log) => log.clientId !== clientId));
+    setNutritionClientId(null);
+    notify("Plan żywieniowy usunięty");
+  }
+
+  /** Odhaczenie posiłku przez podopiecznego w portalu. */
+  function toggleMeal(clientId: string, mealId: string) {
+    const date = todayKey();
+    setMealLogs((current) => {
+      const existing = current.find((log) => log.clientId === clientId && log.date === date);
+      if (!existing) return [...current, { clientId, date, completedMealIds: [mealId] }];
+      const done = existing.completedMealIds.includes(mealId);
+      return current.map((log) => log === existing
+        ? { ...log, completedMealIds: done ? log.completedMealIds.filter((id) => id !== mealId) : [...log.completedMealIds, mealId] }
+        : log);
+    });
   }
 
   function notify(text: string) {
@@ -872,6 +912,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
 
   function navigate(view: View) {
     if (view !== "calendar") setCalendarIntent(false);
+    if (view !== "nutrition") setNutritionClientId(null);
     setActiveView(view);
     setSelectedClient(null);
     setTrainerWorkout(null);
@@ -1048,7 +1089,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const searchResults = normalizedQuery ? [
     ...clients.filter((client) => `${client.name} ${client.goal} ${client.plan}`.toLowerCase().includes(normalizedQuery)).slice(0, 4).map((client) => ({ id: `client-${client.id}`, title: client.name, detail: `${client.goal} · ${client.plan}`, icon: Users, clientId: client.id })),
     ...workoutPlans.filter((plan) => `${plan.name} ${plan.category}`.toLowerCase().includes(normalizedQuery)).slice(0, 3).map((plan) => ({ id: `plan-${plan.id}`, title: plan.name, detail: `Plan treningowy · ${plan.days} dni`, icon: Dumbbell, view: "plans" as View })),
-    ...tasks.filter((task) => `${task.title} ${task.category}`.toLowerCase().includes(normalizedQuery)).slice(0, 3).map((task) => ({ id: `task-${task.id}`, title: task.title, detail: `Zadanie · ${task.due}`, icon: CheckCircle2, view: "tasks" as View })),
+    ...clients.filter((client) => nutritionPlans.some((plan) => plan.clientId === client.id) && client.name.toLowerCase().includes(normalizedQuery)).slice(0, 3).map((client) => ({ id: `diet-${client.id}`, title: `Dieta · ${client.name}`, detail: "Plan żywieniowy", icon: Apple, view: "nutrition" as View })),
     ...[...primaryNavigation, ...secondaryNavigation].filter((item) => item.label.toLowerCase().includes(normalizedQuery)).slice(0, 3).map((item) => ({ id: `view-${item.id}`, title: item.label, detail: "Przejdź do modułu", icon: item.icon, view: item.id })),
   ].slice(0, 8) : [];
 
@@ -1077,7 +1118,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
 
   if (booting) return <FutureBodySplash/>;
   if (!role) return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} onGoogleSignIn={signInWithGoogle} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
-  if (role === "client" && clientSession) return <ClientPortal client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} previewMode={previewMode} />;
+  if (role === "client" && clientSession) return <ClientPortal client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} previewMode={previewMode} dietPlan={nutritionPlans.find((plan) => plan.clientId === clientSession.id)} mealLog={mealLogs.find((log) => log.clientId === clientSession.id && log.date === todayKey())} onToggleMeal={(mealId) => toggleMeal(clientSession.id, mealId)} />;
   if (role === "client") return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} onGoogleSignIn={signInWithGoogle} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
 
   return (
@@ -1166,7 +1207,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
               notify={notify}
             />
           ) : (
-            <ViewRenderer view={activeView} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} onAddWorkout={openScheduling} calendarIntent={calendarIntent} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={setModal} notify={notify} selectedConversation={selectedConversation} setSelectedConversation={setSelectedConversation} chatMessages={chatMessages} setChatMessages={setChatMessages} message={message} setMessage={setMessage} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onExportWeekly={exportWeeklyReport} onExportAll={exportAllData} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
+            <ViewRenderer view={activeView} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} onAddWorkout={openScheduling} calendarIntent={calendarIntent} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={setModal} notify={notify} selectedConversation={selectedConversation} setSelectedConversation={setSelectedConversation} chatMessages={chatMessages} setChatMessages={setChatMessages} message={message} setMessage={setMessage} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onExportWeekly={exportWeeklyReport} onExportAll={exportAllData} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
           )}
           </div>
         </main>
@@ -1206,9 +1247,12 @@ function ViewRenderer(props: {
   workoutHistory: WorkoutCompletion[]; onExportWeekly: (weekLabel?: string) => void; onExportAll: () => void; onEnablePhoneNotifications: () => Promise<boolean>;
   themePreference: ThemePreference; onThemeChange: (theme: ThemePreference) => void;
   profile: TrainerProfile; onProfileChange: (profile: TrainerProfile) => void;
+  nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; nutritionClient: Client | null;
+  onOpenNutrition: (clientId: string) => void; onCloseNutrition: () => void;
+  onSaveNutrition: (plan: NutritionPlan) => void; onDeleteNutrition: (clientId: string) => void;
 }) {
   switch (props.view) {
-    case "dashboard": return <Dashboard clients={props.clients} appointments={props.appointments} tasks={props.tasks} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
+    case "dashboard": return <Dashboard clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
     case "clients": return <ClientsView clients={props.clients} query={props.query} onClient={props.onClient} onAdd={() => props.onModal("client")} />;
     case "calendar": return <CalendarView clients={props.clients} appointments={props.appointments} onSchedule={props.onSchedule} onOpenClient={props.onClient} onStartWorkout={props.onStartWorkout} onCancel={props.onCancelAppointment} onDelete={props.onDeleteAppointment} autoSchedule={props.calendarIntent} />;
     case "plans": return <PlansView clients={props.clients} workoutPlans={props.workoutPlans} initialPlanId={props.selectedPlanId} onOpenDetail={props.onOpenPlan} onCloseDetail={() => props.onNavigate("plans")} onSavePlan={props.onSavePlan} onUpdatePlan={props.onUpdatePlan} notify={props.notify} />;
@@ -1216,7 +1260,9 @@ function ViewRenderer(props: {
     case "progress": return <ProgressView clients={props.clients} workoutHistory={props.workoutHistory} onMeasurement={() => props.onModal("measurement")} />;
     case "checkins": return <CheckinsView notify={props.notify} />;
     case "messages": return <MessagesView selected={props.selectedConversation} onSelect={props.setSelectedConversation} messages={props.chatMessages} setMessages={props.setChatMessages} message={props.message} setMessage={props.setMessage} notify={props.notify} />;
-    case "tasks": return <TasksView tasks={props.tasks} setTasks={props.setTasks} notify={props.notify} />;
+    case "nutrition": return props.nutritionClient
+      ? <NutritionEditor client={props.nutritionClient} plan={props.nutritionPlans.find((plan) => plan.clientId === props.nutritionClient!.id)} onBack={props.onCloseNutrition} onSave={props.onSaveNutrition} onDelete={props.onDeleteNutrition} />
+      : <NutritionView clients={props.clients} plans={props.nutritionPlans} logs={props.mealLogs} onOpen={props.onOpenNutrition} />;
     case "automations": return <AutomationsView notify={props.notify} />;
     case "materials": return <MaterialsView notify={props.notify} />;
     case "reports": return <ReportsView clients={props.clients} appointments={props.appointments} workoutHistory={props.workoutHistory} onExport={props.onExportWeekly} />;
@@ -1224,12 +1270,19 @@ function ViewRenderer(props: {
   }
 }
 
-function Dashboard({ clients, appointments, tasks, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { clients: Client[]; appointments: CalendarAppointment[]; tasks: typeof initialTasks; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
+function Dashboard({ clients, appointments, nutritionPlans, mealLogs, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { clients: Client[]; appointments: CalendarAppointment[]; nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
   const today = appointments.filter((item) => item.date === dateKey(new Date())).sort((a, b) => a.hour - b.hour);
   const nextAppointment = today.find((item) => item.hour >= new Date().getHours()) ?? today[0];
   const nextClient = nextAppointment ? clients.find((client) => client.id === nextAppointment.clientId) ?? null : null;
-  const openTasks = tasks.filter((task) => !task.done).slice(0, 4);
   const clientsWithoutPlan = clients.filter((client) => client.plan === "Brak planu");
+  const clientsWithoutDiet = clients.filter((client) => !nutritionPlans.some((plan) => plan.clientId === client.id));
+  const clientsWithDiet = clients.filter((client) => nutritionPlans.some((plan) => plan.clientId === client.id));
+  const dietComplianceToday = clientsWithDiet.length
+    ? Math.round(clientsWithDiet.reduce((sum, client) => {
+        const plan = nutritionPlans.find((item) => item.clientId === client.id)!;
+        return sum + complianceForDay(plan, mealLogs.find((log) => log.clientId === client.id && log.date === todayKey()));
+      }, 0) / clientsWithDiet.length)
+    : null;
   return (
     <>
       <PageHeader title="Dzień dobry." subtitle={`Dzisiaj: ${today.length} ${today.length === 1 ? "trening" : today.length >= 2 && today.length <= 4 ? "treningi" : "treningów"}. Najważniejsze działania masz poniżej.`} action="Dodaj podopiecznego" onAction={() => onModal("client")} />
@@ -1248,9 +1301,9 @@ function Dashboard({ clients, appointments, tasks, onModal, onClient, onStartWor
           <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4 sm:px-6"><div><h2 className="font-black">Dzisiaj</h2><p className="text-[11px] text-black/36">Treningi pochodzą z kalendarza</p></div><button onClick={() => onNavigate("calendar")} className="text-[9px] font-black uppercase tracking-wider">Pełny kalendarz</button></div>
           {today.length ? <div className="divide-y divide-black/[0.055]">{today.map((item) => { const client = clients.find((person) => person.id === item.clientId); if (!client) return null; const isNext = item.id === nextAppointment?.id; return <div key={item.id} className="grid grid-cols-[54px_1fr] items-center gap-3 px-5 py-4 sm:grid-cols-[62px_40px_1fr_auto] sm:px-6"><div><p className="text-sm font-black">{String(item.hour).padStart(2, "0")}:00</p><p className="text-[9px] text-black/32">60 min</p></div><div className="hidden sm:block"><Avatar initials={client.initials}/></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><button onClick={() => onClient(client.id)} className="truncate text-left text-sm font-black hover:underline">{client.name}</button>{isNext ? <Badge tone="dark">Następny</Badge> : <Badge>{item.status ?? "Zaplanowany"}</Badge>}</div><p className="truncate text-[10px] text-black/38">{client.plan}</p></div><button onClick={() => onStartWorkout(client.id)} className="col-span-2 mt-1 h-11 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white sm:col-span-1 sm:mt-0">Start</button></div>; })}</div> : <div className="p-7 text-center"><CalendarDays size={22} className="mx-auto text-black/25"/><p className="mt-3 text-sm font-black">Nie masz dziś zaplanowanych treningów</p><button onClick={onAddWorkout} className="mt-4 h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">Dodaj trening</button></div>}
         </section>
-        <section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] px-5 py-4"><h2 className="font-black">Do zrobienia</h2><p className="text-[11px] text-black/36">Sprawy wymagające uwagi</p></div><div className="divide-y divide-black/[0.055]">{clientsWithoutPlan.slice(0, 2).map((client) => <button key={client.id} onClick={() => onClient(client.id)} className="flex min-h-16 w-full items-center gap-3 px-5 py-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-full bg-amber-50 text-amber-800"><Dumbbell size={15}/></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client.name} nie ma planu</span><span className="mt-1 block text-[9px] text-black/36">Otwórz profil i przypisz program</span></span><ChevronRight size={14}/></button>)}{openTasks.map((task) => <button key={task.id} onClick={() => onNavigate("tasks")} className="flex min-h-16 w-full items-center gap-3 px-5 py-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><CheckCircle2 size={15}/></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{task.title}</span><span className="mt-1 block text-[9px] text-black/36">{task.due} · {task.category}</span></span><Badge tone={task.priority === "Wysoki" ? "bad" : task.priority === "Średni" ? "warn" : "neutral"}>{task.priority}</Badge></button>)}</div></section>
+        <section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] px-5 py-4"><h2 className="font-black">Do zrobienia</h2><p className="text-[11px] text-black/36">Sprawy wymagające uwagi</p></div><div className="divide-y divide-black/[0.055]">{clientsWithoutPlan.slice(0, 2).map((client) => <button key={client.id} onClick={() => onClient(client.id)} className="flex min-h-16 w-full items-center gap-3 px-5 py-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-full bg-amber-50 text-amber-800"><Dumbbell size={15}/></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client.name} nie ma planu</span><span className="mt-1 block text-[9px] text-black/36">Otwórz profil i przypisz program</span></span><ChevronRight size={14}/></button>)}{clientsWithoutDiet.slice(0, 2).map((client) => <button key={`diet-${client.id}`} onClick={() => onNavigate("nutrition")} className="flex min-h-16 w-full items-center gap-3 px-5 py-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><Apple size={15}/></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client.name} bez planu diety</span><span className="mt-1 block text-[9px] text-black/36">Wylicz zapotrzebowanie i ułóż posiłki</span></span><ChevronRight size={14}/></button>)}{!clientsWithoutPlan.length && !clientsWithoutDiet.length ? <p className="px-5 py-8 text-center text-xs text-black/38">Nic nie wymaga teraz uwagi.</p> : null}</div></section>
       </div>
-      <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4"><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Aktywni podopieczni</p><p className="mt-3 text-2xl font-black">{clients.filter((client) => client.status === "Aktywny").length}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Treningi dziś</p><p className="mt-3 text-2xl font-black">{today.length}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Otwarte zadania</p><p className="mt-3 text-2xl font-black">{tasks.filter((task) => !task.done).length}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Bez planu</p><p className="mt-3 text-2xl font-black">{clientsWithoutPlan.length}</p></article></section>
+      <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4"><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Aktywni podopieczni</p><p className="mt-3 text-2xl font-black">{clients.filter((client) => client.status === "Aktywny").length}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Treningi dziś</p><p className="mt-3 text-2xl font-black">{today.length}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Bez planu diety</p><p className="mt-3 text-2xl font-black">{clientsWithoutDiet.length}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Zgodność diety dziś</p><p className="mt-3 text-2xl font-black">{dietComplianceToday === null ? "—" : `${dietComplianceToday}%`}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Bez planu</p><p className="mt-3 text-2xl font-black">{clientsWithoutPlan.length}</p></article></section>
     </>
   );
 }
@@ -1591,11 +1644,6 @@ function MessagesView({ selected, onSelect, messages, setMessages, message, setM
   return <><PageHeader title="Wiadomości" subtitle={`${conversations.reduce((sum, item) => sum + item.unread, 0)} nieprzeczytanych wiadomości.`} action="Nowa wiadomość" onAction={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} /><div className={`${cardClass} grid min-h-[620px] overflow-hidden md:grid-cols-[310px_1fr]`}><aside className="border-r border-black/[0.06]"><div className="border-b border-black/[0.06] p-4"><div className="flex items-center gap-2 rounded-full bg-[#f1f1ef] px-3 py-2"><Search size={14} className="text-black/30" /><input className="min-w-0 flex-1 bg-transparent text-xs outline-none" placeholder="Szukaj rozmowy" /></div></div>{conversations.map((chat) => <button key={chat.id} onClick={() => onSelect(chat.id)} className={`flex w-full gap-3 border-b border-black/[0.05] p-4 text-left ${selected === chat.id ? "bg-black text-white" : "hover:bg-black/[0.02]"}`}><div className="relative"><Avatar initials={chat.initials} dark={selected !== chat.id} /><span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 ${selected === chat.id ? "border-black" : "border-white"} ${chat.online ? "bg-emerald-400" : "bg-black/20"}`} /></div><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><p className="truncate text-xs font-black">{chat.name}</p><span className={`text-[8px] ${selected === chat.id ? "text-white/35" : "text-black/28"}`}>{chat.time}</span></div><p className={`mt-1 truncate text-[10px] ${selected === chat.id ? "text-white/42" : "text-black/38"}`}>{chat.preview}</p></div>{chat.unread ? <span className={`grid h-5 min-w-5 place-items-center rounded-full text-[8px] font-black ${selected === chat.id ? "bg-white text-black" : "bg-black text-white"}`}>{chat.unread}</span> : null}</button>)}</aside><section className="flex min-h-[520px] flex-col"><div className="flex items-center gap-3 border-b border-black/[0.06] px-5 py-4"><Avatar initials={current.initials} dark /><div><p className="text-sm font-black">{current.name}</p><p className="text-[9px] text-black/34">{current.online ? "Aktywny teraz" : "Ostatnio aktywny wczoraj"}</p></div><button className="ml-auto"><MoreHorizontal size={19} /></button></div><div className="flex-1 space-y-4 overflow-auto bg-[#fafaf8] p-5">{messages.map((text,i) => <div key={`${text}${i}`} className={`max-w-[78%] rounded-2xl px-4 py-3 text-xs leading-5 ${i % 2 === 0 ? "bg-white shadow-sm" : "ml-auto bg-black text-white"}`}>{text}</div>)}</div><div className="flex gap-2 border-t border-black/[0.06] p-4"><input value={message} onChange={(e)=>setMessage(e.target.value)} onKeyDown={(e)=>{if(e.key==="Enter")send();}} className="h-11 min-w-0 flex-1 rounded-full bg-[#f1f1ef] px-4 text-xs outline-none" placeholder="Napisz wiadomość…" /><button onClick={send} className="grid h-11 w-11 place-items-center rounded-full bg-black text-white"><Send size={16} /></button></div></section></div></>;
 }
 
-function TasksView({ tasks, setTasks, notify }: { tasks: typeof initialTasks; setTasks: React.Dispatch<React.SetStateAction<typeof initialTasks>>; notify: (text: string) => void }) {
-  if (!tasks.length) return <><PageHeader title="Zadania" subtitle="Lista spraw wymagających uwagi trenera." action="Dodaj zadanie" onAction={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} /><section className={cardClass}><EmptyState icon={CheckSquare} title="Brak zadań" text="Nowe zadania i przypomnienia pojawią się w tym miejscu."/></section></>;
-  return <><PageHeader title="Zadania" subtitle={`${tasks.filter((t)=>!t.done).length} zadań pozostało do wykonania.`} action="Dodaj zadanie" onAction={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} /><div className="grid gap-4 xl:grid-cols-[1.25fr_.75fr]"><section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] px-6 py-4"><h2 className="font-black">Dzisiaj i najbliższe dni</h2></div>{tasks.map((task)=><button key={task.id} onClick={()=>setTasks((all)=>all.map((item)=>item.id===task.id?{...item,done:!item.done}:item))} className="flex w-full items-center gap-4 border-b border-black/[0.055] px-5 py-4 text-left last:border-0 sm:px-6">{task.done?<CheckCircle2 size={21} className="shrink-0" />:<Circle size={21} className="shrink-0 text-black/25" />}<div className="min-w-0 flex-1"><p className={`truncate text-sm font-black ${task.done?"text-black/28 line-through":""}`}>{task.title}</p><p className="mt-1 text-[10px] text-black/34">{task.due} · {task.category}</p></div><Badge tone={task.priority==="Wysoki"?"bad":task.priority==="Średni"?"warn":"neutral"}>{task.priority}</Badge></button>)}</section><aside className="space-y-4"><section className="rounded-[24px] bg-black p-6 text-white"><p className="text-[10px] font-black uppercase tracking-wider text-white/38">Skuteczność tygodnia</p><p className="mt-4 text-4xl font-black">76%</p><p className="text-xs text-white/40">19 z 25 zadań</p><div className="mt-5"><ProgressBar value={76} dark /></div></section><section className={`${cardClass} p-5`}><h3 className="font-black">Według kategorii</h3><div className="mt-4 space-y-3">{[["Podopieczni",5], ["Plany",3], ["Administracja",2]].map(([label,count])=><div key={String(label)} className="flex items-center justify-between"><span className="text-xs text-black/48">{label}</span><strong className="text-xs">{count}</strong></div>)}</div></section></aside></div></>;
-}
-
 function AutomationsView({ notify }: { notify: (text:string)=>void }) {
   const [active, setActive] = useState(automations.map((item)=>item.active));
   if (!automations.length) return <><PageHeader title="Automatyzacje" subtitle="Reguły działające w tle." action="Nowa automatyzacja" onAction={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} /><section className={cardClass}><EmptyState icon={Zap} title="Brak automatyzacji" text="Utworzone reguły i przypomnienia pojawią się w tym miejscu."/></section></>;
@@ -1742,6 +1790,9 @@ function ClientPortal({
   onLogout,
   notify,
   previewMode = false,
+  dietPlan,
+  mealLog,
+  onToggleMeal,
 }: {
   client: Client;
   program?: TrainingProgram;
@@ -1750,12 +1801,21 @@ function ClientPortal({
   onLogout: () => void;
   notify: (text: string) => void;
   previewMode?: boolean;
+  dietPlan?: NutritionPlan;
+  mealLog?: MealLog;
+  onToggleMeal: (mealId: string) => void;
 }) {
-  const [tab, setTab] = useState<"today" | "plan" | "progress" | "messages" | "profile">("today");
+  const [tab, setTab] = useState<"today" | "plan" | "diet" | "progress" | "messages" | "profile">("today");
   const [activeWorkoutDayId, setActiveWorkoutDayId] = useState<string | null>(null);
+  const dietTargets = dietPlan ? calculateTargets(dietPlan.profile) : null;
+  const dietCompliance = dietPlan ? complianceForDay(dietPlan, mealLog) : 0;
+  const plannedKcal = dietPlan ? sumMeals(dietPlan.meals).kcal : 0;
+  const eatenKcal = dietPlan ? sumMeals(dietPlan.meals.filter((meal) => mealLog?.completedMealIds.includes(meal.id))).kcal : 0;
+
   const tabs: { id: typeof tab; label: string; icon: LucideIcon }[] = [
     { id: "today", label: "Dzisiaj", icon: LayoutDashboard },
     { id: "plan", label: "Plan", icon: Dumbbell },
+    { id: "diet", label: "Dieta", icon: Apple },
     { id: "progress", label: "Postępy", icon: TrendingUp },
     { id: "messages", label: "Wiadomości", icon: MessageCircle },
     { id: "profile", label: "Profil", icon: Users },
@@ -1805,6 +1865,59 @@ function ClientPortal({
           <PortalSection title="Twój plan treningowy" subtitle={`${program.name} · ${program.duration}`} icon={Dumbbell}>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{program.trainingDays.map((day, index) => <button key={day.id} onClick={() => openWorkout(day.id)} className="group rounded-2xl bg-[#f3f3f1] p-5 text-left transition hover:bg-black hover:text-white"><div className="flex items-start justify-between"><span className="text-[9px] font-black opacity-30">{String(index + 1).padStart(2, "0")}</span><ChevronRight size={15} className="opacity-30 transition group-hover:translate-x-1" /></div><h3 className="mt-7 font-black">{day.name}</h3><p className="mt-1 text-[10px] opacity-40">{day.focus}</p><p className="mt-4 text-[9px] font-black uppercase tracking-wider opacity-35">{day.items.length} ćwiczeń · rozpocznij</p></button>)}</div>
           </PortalSection>
+        ) : tab === "diet" ? (
+          dietPlan ? (
+            <div className="space-y-4">
+              <section className="rounded-[24px] bg-black p-5 text-white">
+                <p className="text-[9px] font-black uppercase tracking-wider text-white/38">Cel na dziś</p>
+                <p className="mt-3 text-4xl font-black tracking-[-0.06em]">{dietTargets!.kcal} <span className="text-lg text-white/45">kcal</span></p>
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/12">
+                  <div className="h-full rounded-full bg-[#ffc400] transition-all" style={{ width: `${dietCompliance}%` }} />
+                </div>
+                <p className="mt-2 text-[11px] text-white/45">{dietCompliance}% planu odhaczone · {eatenKcal} z {plannedKcal} kcal</p>
+                <div className="mt-5 grid grid-cols-3 gap-2 text-center">
+                  {[["Białko", `${dietTargets!.protein} g`], ["Tłuszcze", `${dietTargets!.fat} g`], ["Węglowodany", `${dietTargets!.carbs} g`]].map(([label, value]) => (
+                    <div key={label} className="rounded-xl bg-white/[0.07] px-2 py-3">
+                      <p className="text-[8px] font-black uppercase tracking-wider text-white/38">{label}</p>
+                      <p className="mt-1 text-xs font-black">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <section className={`${cardClass} overflow-hidden`}>
+                <div className="border-b border-black/[0.06] p-5">
+                  <h2 className="font-black">Posiłki na dziś</h2>
+                  <p className="mt-1 text-[11px] text-black/38">Odhacz posiłek po zjedzeniu. Trener widzi Twoją zgodność z planem.</p>
+                </div>
+                <div className="divide-y divide-black/[0.055]">
+                  {dietPlan.meals.map((meal) => {
+                    const done = mealLog?.completedMealIds.includes(meal.id) ?? false;
+                    return (
+                      <button key={meal.id} onClick={() => onToggleMeal(meal.id)} aria-pressed={done} className="flex min-h-20 w-full items-center gap-4 p-4 text-left transition hover:bg-black/[0.015] sm:p-5">
+                        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition ${done ? "bg-emerald-600 text-white" : "border border-black/12 text-black/25"}`}>
+                          <Check size={17} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-baseline gap-x-2">
+                            <span className={`text-sm font-black ${done ? "line-through opacity-50" : ""}`}>{meal.name}</span>
+                            <span className="text-[11px] font-bold text-black/40">{meal.time}</span>
+                          </span>
+                          <span className="mt-1 block text-[11px] text-black/42">{meal.kcal} kcal · B {meal.protein} g · T {meal.fat} g · W {meal.carbs} g</span>
+                          {meal.note ? <span className="mt-1 block text-[10px] leading-4 text-black/36">{meal.note}</span> : null}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+          ) : (
+            <section className={`${cardClass} p-10 text-center`}>
+              <Apple size={26} className="mx-auto text-black/25" />
+              <h2 className="mt-4 text-lg font-black">Brak planu żywieniowego</h2>
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-black/42">Twój trener nie przygotował jeszcze planu diety. Pojawi się tutaj automatycznie.</p>
+            </section>
+          )
         ) : tab === "progress" ? (
           <PortalSection title="Twoje postępy" subtitle="Historia realizacji programu" icon={TrendingUp}>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Ukończone treningi", String(completedWorkouts), "zapisane w aplikacji"], ["Masa", client.weight, "aktualny pomiar"], ["Tkanka tłuszczowa", client.bodyFat, "aktualny pomiar"], ["Frekwencja", client.attendance, "regularność spotkań"]].map(([label, value, change]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[9px] font-black uppercase text-black/30">{label}</p><p className="mt-3 text-xl font-black">{value}</p><p className="mt-1 text-[9px] text-black/38">{change}</p></div>)}</div>
