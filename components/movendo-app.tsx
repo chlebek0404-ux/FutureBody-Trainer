@@ -1154,7 +1154,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
       </aside>
 
       <div className={`min-h-screen ${focusedFlow ? "" : "lg:pl-[268px]"}`}>
-        <header className={`fb-dark-surface sticky top-0 z-30 h-[calc(72px+env(safe-area-inset-top))] items-end border-b border-white/[0.07] bg-[#050505]/90 px-4 pb-4 pt-[env(safe-area-inset-top)] text-white backdrop-blur-xl sm:px-7 lg:h-[72px] lg:items-center lg:pb-0 lg:pt-0 lg:px-9 ${focusedFlow ? "hidden" : "flex"}`}>
+        <header className={`fb-dark-surface sticky top-0 z-30 h-[calc(72px+env(safe-area-inset-top))] items-end border-b border-white/[0.07] bg-[#050505]/90 px-4 pb-4 pt-[env(safe-area-inset-top)] text-white sm:px-7 lg:h-[72px] lg:items-center lg:pb-0 lg:pt-0 lg:px-9 ${focusedFlow ? "hidden" : "flex"}`}>
           <button className="mr-3 grid h-11 w-11 place-items-center rounded-[14px] bg-[#ffc400] text-[#050505] lg:hidden" onClick={() => setMobileMenu(true)} aria-label="Otwórz menu"><Menu size={18} /></button>
           <div className="relative hidden w-full max-w-[430px] sm:block">
             <div className="flex items-center gap-2.5 rounded-[16px] border border-white/[0.07] bg-[#111214] px-4 py-2.5"><Search size={16} className="text-white/30" /><input ref={searchInputRef} value={query} onFocus={() => setSearchFocused(true)} onChange={(event) => { setQuery(event.target.value); setSearchFocused(true); }} placeholder="Szukaj podopiecznego, planu, zadania…" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/28" /><span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/30">Ctrl K</span></div>
@@ -1406,30 +1406,162 @@ function CalendarView({ clients, appointments, onSchedule, onOpenClient, onStart
       ? `${new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short" }).format(weekDays[0])} – ${new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short", year: "numeric" }).format(weekDays[6])}`
       : formatCalendarDate(selectedDate);
 
-  return <>
-    <PageHeader title="Kalendarz" subtitle="Dzień jest widokiem głównym. Kliknij wolną godzinę, aby szybko dodać trening." secondary={<div className="flex flex-wrap items-center justify-end gap-2"><label className="flex h-11 items-center gap-2 rounded-full border border-black/10 bg-white px-4"><CalendarDays size={14}/><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="bg-transparent text-[10px] font-black outline-none" aria-label="Wybierz dzień"/></label><button onClick={() => setSelectedDate(today)} className="h-11 rounded-full border border-black/10 bg-white px-4 text-[9px] font-black uppercase">Dzisiaj</button></div>}/>
+  const dayLabel = (date: Date) => new Intl.DateTimeFormat("pl-PL", { weekday: "short" }).format(date);
+  const appointmentsForDay = (key: string) =>
+    appointments.filter((item) => item.date === key).sort((a, b) => a.hour - b.hour);
 
+  function AppointmentRow({ appointment }: { appointment: CalendarAppointment }) {
+    const client = clientMap.get(appointment.clientId);
+    return (
+      <button
+        onClick={() => setPreviewId(appointment.id)}
+        className={`flex min-h-16 w-full items-center gap-3 rounded-2xl bg-[#f3f3f1] px-3.5 py-3 text-left transition hover:bg-[#ededeb] ${appointment.status === "Anulowany" ? "opacity-50" : ""}`}
+      >
+        <span className="w-12 shrink-0 text-xs font-black tabular-nums">{String(appointment.hour).padStart(2, "0")}:00</span>
+        <Avatar initials={client?.initials ?? "?"} size="sm" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-black">{client?.name ?? "Usunięty podopieczny"}</span>
+          <span className="mt-0.5 block truncate text-[10px] text-black/40">{appointment.kind ?? "Trening personalny"} · {appointment.status ?? "Zaplanowany"}</span>
+        </span>
+        <ChevronRight size={15} className="shrink-0 text-black/25" />
+      </button>
+    );
+  }
+
+  return <>
+    <PageHeader title="Kalendarz" subtitle="Dzień jest widokiem głównym. Kliknij wolną godzinę, aby dodać trening." />
+
+    {/* Jeden widok: nagłówek, wybór dnia, siatka i historia w tej samej karcie,
+        bez zagnieżdżonego przewijania — przewija się cała strona. */}
     <section className={`${cardClass} overflow-hidden`}>
-      <header className="flex flex-col gap-3 border-b border-black/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-        <div className="flex items-center gap-2"><button onClick={() => changePeriod(-1)} className="grid h-11 w-11 place-items-center rounded-full border border-black/10" aria-label="Poprzedni okres"><ChevronLeft size={16}/></button><div className="min-w-0 px-2"><p className="text-[9px] font-black uppercase tracking-wider text-black/32">{mode === "day" ? "Widok dnia" : mode === "week" ? "Widok tygodnia" : "Widok miesiąca"}</p><h2 className="truncate text-sm font-black capitalize">{periodLabel}</h2></div><button onClick={() => changePeriod(1)} className="grid h-11 w-11 place-items-center rounded-full border border-black/10" aria-label="Następny okres"><ChevronRight size={16}/></button></div>
-        <div className="grid grid-cols-3 rounded-full bg-[#f2f2f0] p-1">{(["day", "week", "month"] as CalendarMode[]).map((item) => <button key={item} onClick={() => setMode(item)} className={`h-9 rounded-full px-4 text-[9px] font-black uppercase ${mode === item ? "fb-selected" : "text-black/42"}`}>{item === "day" ? "Dzień" : item === "week" ? "Tydzień" : "Miesiąc"}</button>)}</div>
+      <header className="flex flex-col gap-3 border-b border-black/[0.06] p-4 sm:px-5">
+        <div className="flex items-center gap-2">
+          <button onClick={() => changePeriod(-1)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-black/10" aria-label="Poprzedni okres"><ChevronLeft size={16} /></button>
+          <p className="min-w-0 flex-1 truncate text-center text-sm font-black capitalize">{periodLabel}</p>
+          <button onClick={() => changePeriod(1)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-black/10" aria-label="Następny okres"><ChevronRight size={16} /></button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="grid flex-1 grid-cols-3 rounded-full bg-[#f2f2f0] p-1">
+            {([["day", "Dzień"], ["week", "Tydzień"], ["month", "Miesiąc"]] as [CalendarMode, string][]).map(([value, label]) => (
+              <button key={value} onClick={() => setMode(value)} aria-pressed={mode === value} className={`h-10 rounded-full px-3 text-[10px] font-black uppercase tracking-wider transition ${mode === value ? "bg-black text-white" : "text-black/45"}`}>{label}</button>
+            ))}
+          </div>
+          <button onClick={() => { setSelectedDate(today); setMode("day"); }} className="h-11 shrink-0 rounded-full border border-black/12 px-4 text-[10px] font-black uppercase tracking-wider">Dziś</button>
+        </div>
       </header>
 
-      {mode === "day" ? <div className="max-h-[680px] overflow-y-auto">{hours.map((hour) => {
-        const appointment = slotMap.get(`${selectedDate}-${hour}`);
-        const client = appointment ? clientMap.get(appointment.clientId) : null;
-        return <div key={`${selectedDate}-${hour}`} className="grid min-h-[78px] grid-cols-[58px_1fr] border-b border-black/[0.055] p-2.5 last:border-0 sm:grid-cols-[74px_1fr] sm:px-5"><div className="pt-3"><p className="text-xs font-black">{String(hour).padStart(2, "0")}:00</p><p className="text-[8px] text-black/30">pełna godzina</p></div>{appointment ? <button onClick={() => setPreviewId(appointment.id)} className={`fb-dark-surface flex min-w-0 items-center gap-3 rounded-2xl bg-[#0b0b0d] px-4 py-3 text-left text-white ${appointment.status === "Anulowany" ? "opacity-45" : ""}`}><Avatar initials={client?.initials ?? "?"} size="sm"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client?.name ?? "Usunięty podopieczny"}</span><span className="mt-1 block truncate text-[9px] text-white/42">{appointment.kind ?? "Trening personalny"} · 60 min · {appointment.status ?? "Zaplanowany"}</span></span><ChevronRight size={15}/></button> : <button onClick={() => setSlot({ date: selectedDate, hour })} className="flex min-h-14 items-center justify-between rounded-2xl border border-dashed border-black/10 px-4 text-left text-[10px] font-bold text-black/34 hover:border-black/30"><span>Wolny termin</span><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><Plus size={15}/></span></button>}</div>;
-      })}</div> : null}
+      {/* Pasek dni tygodnia — wspólny punkt nawigacji dla widoku dnia i tygodnia. */}
+      {mode !== "month" ? (
+        <div className="grid grid-cols-7 gap-1 border-b border-black/[0.06] p-3 sm:px-5">
+          {weekDays.map((date) => {
+            const key = dateKey(date);
+            const count = appointmentsForDay(key).length;
+            const active = key === selectedDate;
+            return (
+              <button key={key} onClick={() => openDay(key)} aria-pressed={active} className={`flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-2xl transition ${active ? "bg-black text-white" : key === today ? "bg-[#f2f2f0]" : ""}`}>
+                <span className={`text-[9px] font-black uppercase ${active ? "text-white/50" : "text-black/35"}`}>{dayLabel(date)}</span>
+                <span className="text-sm font-black tabular-nums">{date.getDate()}</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${count ? (active ? "bg-[#ffc400]" : "bg-black/45") : "bg-transparent"}`} />
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
-      {mode === "week" ? <div className="overflow-x-auto"><div className="min-w-[780px]"><div className="grid grid-cols-[58px_repeat(7,minmax(100px,1fr))] border-b border-black/[0.06]"><div/>{weekDays.map((day) => { const key = dateKey(day); return <button key={key} onClick={() => openDay(key)} className={`border-l border-black/[0.055] px-2 py-3 text-center text-[9px] font-black uppercase ${key === selectedDate ? "fb-selected" : key === today ? "bg-black/[0.04]" : ""}`}>{new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "numeric" }).format(day)}</button>; })}</div><div className="max-h-[620px] overflow-y-auto">{hours.map((hour) => <div key={hour} className="grid grid-cols-[58px_repeat(7,minmax(100px,1fr))]"><div className="h-[68px] border-b border-black/[0.045] pr-2 pt-2 text-right text-[9px] text-black/30">{String(hour).padStart(2, "0")}:00</div>{weekDays.map((day) => { const key = dateKey(day); const appointment = slotMap.get(`${key}-${hour}`); const client = appointment ? clientMap.get(appointment.clientId) : null; return <button key={`${key}-${hour}`} onClick={() => appointment ? setPreviewId(appointment.id) : setSlot({ date: key, hour })} aria-label={appointment ? `${client?.name ?? "Usunięty podopieczny"}, ${key}, ${hour}:00` : `Wolny termin, ${key}, ${hour}:00`} className="h-[68px] border-b border-l border-black/[0.045] p-1.5 text-left hover:bg-black/[0.025]">{appointment ? <span className={`block h-full rounded-xl bg-black p-2 text-white ${appointment.status === "Anulowany" ? "opacity-40" : ""}`}><span className="block truncate text-[9px] font-black">{client?.name ?? "Usunięty podopieczny"}</span><span className="mt-1 block truncate text-[7px] text-white/42">{appointment.status ?? "Zaplanowany"}</span></span> : <span className="grid h-full place-items-center text-black/20"><Plus size={14}/></span>}</button>; })}</div>)}</div></div></div> : null}
+      {/* Widok dnia: pełna doba bez wewnętrznego przewijania. */}
+      {mode === "day" ? (
+        <div className="divide-y divide-black/[0.055]">
+          {hours.map((hour) => {
+            const appointment = slotMap.get(`${selectedDate}-${hour}`);
+            const client = appointment ? clientMap.get(appointment.clientId) : null;
+            return (
+              <div key={`${selectedDate}-${hour}`} className="grid grid-cols-[52px_1fr] items-center gap-2 p-2.5 sm:grid-cols-[64px_1fr] sm:px-5">
+                <span className="text-[11px] font-black tabular-nums text-black/45">{String(hour).padStart(2, "0")}:00</span>
+                {appointment && client ? (
+                  <button onClick={() => setPreviewId(appointment.id)} className={`flex min-h-16 items-center gap-3 rounded-2xl bg-black px-3.5 py-3 text-left text-white ${appointment.status === "Anulowany" ? "opacity-45" : ""}`}>
+                    <Avatar initials={client.initials} size="sm" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-black">{client.name}</span>
+                      <span className="mt-0.5 block truncate text-[10px] text-white/45">{appointment.kind ?? "Trening personalny"} · {appointment.status ?? "Zaplanowany"}</span>
+                    </span>
+                    <ChevronRight size={15} className="shrink-0" />
+                  </button>
+                ) : (
+                  <button onClick={() => setSlot({ date: selectedDate, hour })} className="flex min-h-16 items-center justify-between rounded-2xl border border-dashed border-black/12 px-3.5 text-left text-[11px] font-bold text-black/35 transition hover:border-black/35 hover:text-black/60">
+                    Wolny termin
+                    <span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><Plus size={15} /></span>
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
-      {mode === "month" ? <div><div className="grid grid-cols-7 border-b border-black/[0.06]">{["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"].map((label) => <div key={label} className="py-2 text-center text-[8px] font-black uppercase text-black/30">{label}</div>)}</div><div className="grid grid-cols-7">{monthDays.map((day) => { const key = dateKey(day); const dayAppointments = appointments.filter((appointment) => appointment.date === key && appointment.status !== "Anulowany"); const inMonth = day.getMonth() === selected.getMonth(); return <button key={key} onClick={() => openDay(key)} className={`min-h-[68px] border-b border-r border-black/[0.05] p-2 text-left sm:min-h-[92px] ${inMonth ? "" : "opacity-28"} ${key === today ? "bg-black/[0.04]" : ""}`}><span className={`grid h-7 w-7 place-items-center rounded-full text-[9px] font-black ${key === today ? "bg-black text-white" : ""}`}>{day.getDate()}</span>{dayAppointments.length ? <span className="mt-2 block rounded-full bg-[#ffc400] px-2 py-1 text-center text-[8px] font-black text-[#050505]">{dayAppointments.length} {dayAppointments.length === 1 ? "trening" : "treningi"}</span> : null}</button>; })}</div></div> : null}
+      {/* Widok tygodnia: lista dni, nie pomniejszona siatka z desktopu. */}
+      {mode === "week" ? (
+        <div className="divide-y divide-black/[0.055]">
+          {weekDays.map((date) => {
+            const key = dateKey(date);
+            const list = appointmentsForDay(key);
+            return (
+              <div key={key} className="p-4 sm:px-5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <button onClick={() => openDay(key)} className="text-sm font-black capitalize hover:underline">{formatCalendarDate(key)}</button>
+                  <span className="text-[10px] font-bold text-black/35">{list.length ? `${list.length} ${list.length === 1 ? "trening" : "treningi"}` : "wolny dzień"}</span>
+                </div>
+                {list.length ? (
+                  <div className="mt-3 space-y-2">{list.map((item) => <AppointmentRow key={item.id} appointment={item} />)}</div>
+                ) : (
+                  <button onClick={() => openDay(key)} className="mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border border-dashed border-black/12 text-[11px] font-bold text-black/35">Dodaj trening</button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* Widok miesiąca: siatka dni prowadząca do dnia. */}
+      {mode === "month" ? (
+        <div className="p-3 sm:p-5">
+          <div className="grid grid-cols-7 gap-1 pb-2">
+            {weekDays.map((date) => <span key={date.toISOString()} className="text-center text-[9px] font-black uppercase text-black/32">{dayLabel(date)}</span>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {monthDays.map((date) => {
+              const key = dateKey(date);
+              const count = appointmentsForDay(key).length;
+              const otherMonth = date.getMonth() !== selected.getMonth();
+              return (
+                <button key={key} onClick={() => openDay(key)} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl transition ${key === today ? "bg-[#f2f2f0]" : ""} ${otherMonth ? "opacity-30" : ""}`}>
+                  <span className="text-xs font-black tabular-nums">{date.getDate()}</span>
+                  <span className={`h-1.5 w-1.5 rounded-full ${count ? "bg-black/50" : "bg-transparent"}`} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Historia w tej samej karcie, nie jako druga struktura. */}
+      <div className="border-t border-black/[0.06] p-4 sm:px-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-black">Ostatnie terminy</h2>
+            <p className="mt-0.5 text-[10px] text-black/36">Anulowane pozostają w historii</p>
+          </div>
+          <Badge>{history.length}</Badge>
+        </div>
+        {history.length ? (
+          <div className="mt-3 space-y-2">{history.slice(0, 6).map((item) => <AppointmentRow key={item.id} appointment={item} />)}</div>
+        ) : (
+          <p className="mt-3 rounded-2xl border border-dashed border-black/10 px-4 py-6 text-center text-[11px] text-black/38">Historia pojawi się po pierwszych zakończonych terminach.</p>
+        )}
+      </div>
     </section>
 
-    <section className={`${cardClass} mt-4 overflow-hidden`}><div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4"><div><h2 className="font-black">Ostatnie terminy</h2><p className="text-[10px] text-black/36">Anulowane terminy pozostają w historii</p></div><Badge tone="dark">Historia</Badge></div>{history.length ? <div className="grid gap-px bg-black/[0.05] md:grid-cols-2 xl:grid-cols-3">{history.slice(0, 6).map((appointment) => { const client = clientMap.get(appointment.clientId); return <button key={appointment.id} onClick={() => setPreviewId(appointment.id)} className="flex min-h-16 items-center gap-3 bg-white p-4 text-left"><span className="grid h-10 w-10 place-items-center rounded-full bg-black text-[8px] font-black text-white">{String(appointment.hour).padStart(2, "0")}:00</span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client?.name ?? "Usunięty podopieczny"}</span><span className="block truncate text-[9px] text-black/36">{formatCalendarDate(appointment.date)} · {appointment.status ?? "Zaplanowany"}</span></span><ChevronRight size={14}/></button>; })}</div> : <div className="p-6 text-xs text-black/40">Historia pojawi się po pierwszych zakończonych terminach.</div>}</section>
-
-    {slot ? <ScheduleDialog slot={slot} clients={clients} currentClientId={appointments.find((appointment) => appointment.id === slot.appointmentId)?.clientId} onClose={() => setSlot(null)} onSelect={(clientId) => { onSchedule({ id: slot.appointmentId, date: slot.date, hour: slot.hour, clientId }); setSlot(null); }}/> : null}
-    {preview ? <AppointmentDetails appointment={preview} client={clientMap.get(preview.clientId)} onClose={() => setPreviewId(null)} onEdit={() => { setPreviewId(null); setSlot({ date: preview.date, hour: preview.hour, appointmentId: preview.id }); }} onOpenClient={() => { setPreviewId(null); onOpenClient(preview.clientId); }} onStartWorkout={() => { setPreviewId(null); onStartWorkout(preview.clientId); }} onCancel={() => { onCancel(preview.id); setPreviewId(null); }} onDelete={() => { onDelete(preview.id); setPreviewId(null); }}/> : null}
+    {slot ? <ScheduleDialog slot={slot} clients={clients} currentClientId={appointments.find((appointment) => appointment.id === slot.appointmentId)?.clientId} onClose={() => setSlot(null)} onSelect={(clientId) => { onSchedule({ id: slot.appointmentId, date: slot.date, hour: slot.hour, clientId }); setSlot(null); }} /> : null}
+    {preview ? <AppointmentDetails appointment={preview} client={clientMap.get(preview.clientId)} onClose={() => setPreviewId(null)} onEdit={() => { setPreviewId(null); setSlot({ date: preview.date, hour: preview.hour, appointmentId: preview.id }); }} onOpenClient={() => { setPreviewId(null); onOpenClient(preview.clientId); }} onStartWorkout={() => { setPreviewId(null); onStartWorkout(preview.clientId); }} onCancel={() => { onCancel(preview.id); setPreviewId(null); }} onDelete={() => { onDelete(preview.id); setPreviewId(null); }} /> : null}
   </>;
 }
 
@@ -2127,7 +2259,7 @@ function ClientPortal({
 
   return (
     <div className="futurebody-app futurebody-app-enter min-h-[100svh] bg-[#050505] text-[#f7f7f7]">
-      <header className="fb-dark-surface sticky top-0 z-30 border-b border-white/[0.07] bg-[#050505]/92 pt-[env(safe-area-inset-top)] text-white backdrop-blur-xl">
+      <header className="fb-dark-surface sticky top-0 z-30 border-b border-white/[0.07] bg-[#050505]/92 pt-[env(safe-area-inset-top)] text-white">
         <div className="mx-auto flex h-[70px] max-w-6xl items-center px-4 sm:px-7">
           <img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover" />
           <div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">Panel podopiecznego</p></div>
