@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -64,6 +64,7 @@ import { exerciseCategories, exerciseLibrary, searchExercises, suggestExercises,
 import { createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
 import { downloadMovendoPdf } from "@/lib/pdf-export";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { loadAccountSession, restoreAccountSession, type AccountRole, type AccountSession } from "@/lib/session";
 
 type View =
   | "dashboard"
@@ -160,7 +161,6 @@ function EmptyState({ icon: Icon, title, text }: { icon: LucideIcon; title: stri
   );
 }
 
-type AccountRole = "trainer" | "client";
 type AuthMode = "login" | "trainer-register" | "forgot" | "code" | "client-register";
 type ActivationInfo = { clientId: string; clientName: string; trainerName: string; code: string };
 
@@ -342,11 +342,13 @@ function readStoredJson<T>(key: string, fallback: T): T {
   }
 }
 
-function readStoredRole(): AccountRole | null {
+// Rola nie jest odtwarzana z przeglądarki. Jedynym źródłem prawdy jest sesja Supabase,
+// dzięki czemu wygaszony token nie otwiera panelu trenera.
+function prepareStorage() {
   if (typeof window === "undefined") return null;
   clearExampleDataOnce();
-  const saved = window.localStorage.getItem("futurebody_role");
-  return saved === "trainer" || saved === "client" ? saved : null;
+  window.localStorage.removeItem("futurebody_role");
+  return null;
 }
 
 function readStoredPlans(): TrainingProgram[] {
@@ -420,7 +422,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const [booting, setBooting] = useState(true);
   const [themePreference, setThemePreference] = useState<ThemePreference>(readThemePreference);
   const [systemDark, setSystemDark] = useState(() => typeof window === "undefined" || window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const [role, setRole] = useState<AccountRole | null>(readStoredRole);
+  const [role, setRole] = useState<AccountRole | null>(prepareStorage);
   const [activeView, setActiveView] = useState<View>("dashboard");
   const [mobileMenu, setMobileMenu] = useState(false);
   const [moreNavigationOpen, setMoreNavigationOpen] = useState(false);
@@ -501,9 +503,55 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     return () => window.removeEventListener("popstate", syncRouteFromHash);
   }, []);
 
+  const applySession = useCallback((session: AccountSession | null) => {
+    setRole(session?.role ?? null);
+    setClientSession(session?.clientRecord ?? null);
+  }, []);
+
+  // Splash trwa tyle co dotychczas, ale ekran startowy czeka też na odtworzenie sesji,
+  // żeby zalogowany użytkownik nie zobaczył formularza logowania na ułamek sekundy.
   useEffect(() => {
-    const timer = window.setTimeout(() => setBooting(false), 3400);
-    return () => window.clearTimeout(timer);
+    let active = true;
+    let timer = 0;
+    const splashDelay = new Promise<void>((resolve) => {
+      timer = window.setTimeout(resolve, 3400);
+    });
+    const supabase = getSupabaseBrowserClient();
+
+    async function boot() {
+      let restored = supabase ? await restoreAccountSession(supabase) : null;
+      // Konto podopiecznego bez przypisanego profilu nie ma czego wyświetlić —
+      // zamykamy sesję zamiast zapętlać ekran logowania.
+      if (supabase && restored?.role === "client" && !restored.clientRecord) {
+        await supabase.auth.signOut();
+        restored = null;
+      }
+      await splashDelay;
+      if (!active) return;
+      if (restored) applySession(restored);
+      setBooting(false);
+    }
+
+    void boot();
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [applySession]);
+
+  // Wygaśnięcie tokenu albo wylogowanie w innej karcie natychmiast zamyka panel.
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event !== "SIGNED_OUT") return;
+      setRole(null);
+      setClientSession(null);
+      setSelectedClient(null);
+      setTrainerWorkout(null);
+      setActiveView("dashboard");
+    });
+    return () => data.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -521,11 +569,6 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.localStorage.setItem("futurebody_workout_history", JSON.stringify(workoutHistory));
     window.localStorage.setItem("futurebody_invitations", JSON.stringify(invitations));
   }, [clients, invitations, tasks, workoutHistory, workoutPlans]);
-
-  useEffect(() => {
-    if (role) window.localStorage.setItem("futurebody_role", role);
-    else window.localStorage.removeItem("futurebody_role");
-  }, [role]);
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -559,8 +602,10 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
       const { error: claimError } = await supabase.rpc("claim_client_invitation", { invitation_code: pendingInvitation });
       if (!claimError) window.localStorage.removeItem("movendo_pending_invitation");
     }
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
-    setRole(profile?.role === "client" ? "client" : "trainer");
+    const session = await loadAccountSession(supabase, data.user.id, data.user.email ?? email);
+    if (!session) return "To konto nie ma jeszcze profilu w systemie. Skontaktuj się z trenerem prowadzącym.";
+    if (session.role === "client" && !session.clientRecord) return "Konto nie jest przypisane do trenera. Użyj kodu aktywacyjnego otrzymanego od trenera.";
+    applySession(session);
     return null;
   }
 
@@ -571,7 +616,8 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name, role: "trainer" } } });
     if (error) return "Nie udało się utworzyć konta. Ten adres może być już zajęty.";
     if (!data.session) return "INFO:Konto utworzone. Potwierdź adres e-mail, aby się zalogować.";
-    setRole("trainer");
+    const session = data.user ? await loadAccountSession(supabase, data.user.id, data.user.email ?? email) : null;
+    applySession(session ?? { userId: data.user?.id ?? "", email, role: "trainer", fullName: name, clientRecord: null });
     return null;
   }
 
@@ -611,6 +657,11 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
       }
       const { error: claimError } = await supabase.rpc("claim_client_invitation", { invitation_code: info.code });
       if (claimError) return "Konto powstało, ale nie udało się przypisać profilu. Skontaktuj się z trenerem.";
+      setInvitations((current) => current.map((item) => item.code === info.code ? { ...item, status: "used" } : item));
+      const session = data.user ? await loadAccountSession(supabase, data.user.id, data.user.email ?? email) : null;
+      if (!session?.clientRecord) return "Konto powstało, ale profil podopiecznego nie jest jeszcze dostępny. Zaloguj się za chwilę.";
+      applySession(session);
+      return null;
     }
     setInvitations((current) => current.map((item) => item.code === info.code ? { ...item, status: "used" } : item));
     const matchedClient = clients.find((client) => client.id === info.clientId);
@@ -623,6 +674,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     const supabase = getSupabaseBrowserClient();
     if (supabase) await supabase.auth.signOut();
     setRole(null);
+    setClientSession(null);
     setActiveView("dashboard");
     setSelectedClient(null);
     setTrainerWorkout(null);

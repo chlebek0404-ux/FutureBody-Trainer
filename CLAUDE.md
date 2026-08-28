@@ -46,6 +46,9 @@ Skopiuj `.env.example` do `.env.local` i uzupełnij wartości Supabase. Sekrety 
 - po uruchomieniu aplikacja pokazuje splash i pusty ekran logowania;
 - nie ma kont testowych ani przykładowych rekordów użytkowników;
 - logowanie nie omija Supabase;
+- rola konta pochodzi wyłącznie z sesji Supabase, nie z `localStorage`;
+- sesja jest odtwarzana przy starcie, a wylogowanie i wygaśnięcie tokenu zamykają panel;
+- konto podopiecznego wczytuje swój rekord z tabeli `clients` po `auth_user_id`;
 - dane demonstracyjne nie są ładowane do stanu aplikacji;
 - hosting i produkcyjna konfiguracja usług są odłożone na końcowy etap.
 
