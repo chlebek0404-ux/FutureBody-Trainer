@@ -1116,8 +1116,8 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
                 const Icon = item.icon;
                 const active = activeView === item.id && !selectedClient && !trainerWorkout;
                 return (
-                  <button key={item.id} onClick={() => navigate(item.id)} className={`flex h-11 w-full items-center gap-3 rounded-[14px] px-3 text-left text-[12px] font-semibold transition ${active ? "bg-[#ffc400] text-[#050505] shadow-[0_8px_26px_rgba(255,196,0,.12)]" : "text-white/54 hover:bg-white/[0.06] hover:text-white"}`}>
-                    <Icon size={16} strokeWidth={active ? 2.5 : 1.8} /><span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  <button key={item.id} onClick={() => navigate(item.id)} className={`fb-nav-item ${active ? "fb-nav-item-active" : ""}`}>
+                    <span className="fb-nav-rail" aria-hidden="true" /><Icon size={17} strokeWidth={active ? 2.4 : 1.8} /><span className="min-w-0 flex-1 truncate">{item.label}</span>
                   </button>
                 );
               })}
@@ -1193,7 +1193,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
       </div>
 
       {!focusedFlow ? <nav className="fb-dark-surface fixed inset-x-3 bottom-[max(.75rem,env(safe-area-inset-bottom))] z-30 flex items-center justify-around rounded-[22px] border border-white/[0.08] bg-[#0b0b0d]/95 px-2 py-2 text-white shadow-[0_18px_50px_rgba(0,0,0,.45)] backdrop-blur-xl md:hidden">
-        {primaryNavigation.map((item) => { const Icon = item.icon; const active = activeView === item.id && !selectedClient && !trainerWorkout; return <button key={item.id} onClick={() => navigate(item.id)} className={`flex min-h-12 min-w-[52px] flex-col items-center justify-center gap-1 rounded-[16px] px-1.5 py-1.5 text-[8px] font-bold ${active ? "bg-[#ffc400] text-[#050505]" : "text-white/42"}`}><Icon size={17} /><span>{item.label}</span></button>; })}
+        {primaryNavigation.map((item) => { const Icon = item.icon; const active = activeView === item.id && !selectedClient && !trainerWorkout; return <button key={item.id} onClick={() => navigate(item.id)} className={`fb-tab ${active ? "fb-tab-active" : ""}`}><Icon size={17} /><span>{item.label}</span></button>; })}
         <button onClick={() => { setMoreNavigationOpen(true); setMobileMenu(true); }} className={`flex min-h-12 min-w-[52px] flex-col items-center justify-center gap-1 rounded-[16px] px-1.5 py-1.5 text-[8px] font-bold ${secondaryActive ? "bg-[#ffc400] text-[#050505]" : "text-white/42"}`}><MoreHorizontal size={17}/><span>Więcej</span></button>
       </nav> : null}
 
@@ -1260,30 +1260,133 @@ function Dashboard({ clients, appointments, nutritionPlans, mealLogs, onModal, o
         return sum + complianceForDay(plan, mealLogs.find((log) => log.clientId === client.id && log.date === todayKey()));
       }, 0) / clientsWithDiet.length)
     : null;
+
+  const hour = new Date().getHours();
+  const greeting = hour < 5 ? "Dobrej nocy." : hour < 12 ? "Dzień dobry." : hour < 18 ? "Dobre popołudnie." : "Dobry wieczór.";
+  const dateLabel = new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+
+  const stats: { label: string; value: string; hint?: string }[] = [
+    { label: "Treningi dziś", value: String(today.length) },
+    { label: "Aktywni podopieczni", value: String(clients.filter((client) => client.status === "Aktywny").length), hint: `z ${clients.length}` },
+    { label: "Bez planu", value: String(clientsWithoutPlan.length) },
+    { label: "Bez diety", value: String(clientsWithoutDiet.length) },
+    { label: "Zgodność diety", value: dietComplianceToday === null ? "—" : `${dietComplianceToday}%` },
+  ];
+
   return (
     <>
-      <PageHeader title="Dzień dobry." subtitle={`Dzisiaj: ${today.length} ${today.length === 1 ? "trening" : today.length >= 2 && today.length <= 4 ? "treningi" : "treningów"}. Najważniejsze działania masz poniżej.`} action="Dodaj podopiecznego" onAction={() => onModal("client")} />
+      {/* Hero: dzień, najbliższy trening i akcja główna w jednym kadrze. */}
+      <section className="fb-panel relative overflow-hidden p-6 sm:p-8 lg:p-10">
+        <div className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-[var(--fb-gold)] opacity-[0.14] blur-3xl" aria-hidden="true" />
+        <div className="relative">
+          <p className="fb-label">{dateLabel}</p>
+          <h1 className="fb-display mt-3">{greeting}</h1>
+          <p className="mt-3 max-w-md text-sm leading-6 text-[var(--fb-text-secondary)]">
+            {today.length
+              ? `Masz dziś ${today.length} ${today.length === 1 ? "trening" : today.length < 5 ? "treningi" : "treningów"}. Najbliższy zaczyna się o ${String(nextAppointment!.hour).padStart(2, "0")}:00.`
+              : "Nie masz dziś zaplanowanych treningów. Dobry moment na uzupełnienie planów."}
+          </p>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Szybkie akcje">
-        
-        
-        <button onClick={() => onNavigate("plans")} className={`${cardClass} flex min-h-20 items-center gap-4 p-4 text-left transition hover:-translate-y-0.5`}><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white"><Dumbbell size={18}/></span><span><span className="block text-xs font-black">Utwórz plan</span><span className="mt-1 block text-[10px] text-black/38">Przejdź do planów treningowych</span></span></button>
-        <button onClick={() => onNavigate("calendar")} className={`${cardClass} flex min-h-20 items-center gap-4 p-4 text-left transition hover:-translate-y-0.5`}><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white"><CalendarDays size={18}/></span><span><span className="block text-xs font-black">Otwórz kalendarz</span><span className="mt-1 block text-[10px] text-black/38">Dzień, tydzień i historia</span></span></button>
+          {nextAppointment && nextClient ? (
+            <div className="fb-glass mt-7 flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5">
+              <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-[linear-gradient(180deg,var(--fb-gold-highlight),var(--fb-gold))] text-[#0c0c0f]">
+                <span className="text-xl font-black leading-none">{String(nextAppointment.hour).padStart(2, "0")}</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="fb-label">Najbliższy trening</p>
+                <p className="mt-1 truncate text-xl font-black tracking-[-0.03em]">{nextClient.name}</p>
+                <p className="mt-0.5 truncate text-[11px] text-[var(--fb-text-muted)]">{nextClient.plan} · {nextAppointment.kind ?? "Trening personalny"}</p>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button onClick={() => onClient(nextClient.id)} className="fb-btn fb-btn-ghost">Profil</button>
+                <button onClick={() => onStartWorkout(nextClient.id)} className="fb-btn fb-btn-primary"><Dumbbell size={15} />Rozpocznij</button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-7 flex flex-wrap gap-2">
+              <button onClick={onAddWorkout} className="fb-btn fb-btn-primary"><CalendarPlus size={15} />Zaplanuj trening</button>
+              <button onClick={() => onModal("client")} className="fb-btn fb-btn-ghost"><Plus size={15} />Dodaj podopiecznego</button>
+            </div>
+          )}
+        </div>
       </section>
 
-      {nextAppointment && nextClient ? <section className="fb-dark-surface mt-4 overflow-hidden rounded-[28px] border border-white/[0.08] bg-[#0b0b0d] p-5 text-white shadow-[0_18px_50px_rgba(0,0,0,.16)] sm:p-7"><div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"><div className="flex min-w-0 items-start gap-4"><span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[#ffc400] text-xl font-black text-[#050505]">{String(nextAppointment.hour).padStart(2, "0")}</span><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.16em] text-white/38">Najbliższy trening · dziś {String(nextAppointment.hour).padStart(2, "0")}:00</p><h2 className="mt-2 truncate text-2xl font-black tracking-[-0.04em] sm:text-3xl">{nextClient.name}</h2><p className="mt-1 text-xs text-white/45">{nextClient.plan} · {nextAppointment.kind ?? "Trening personalny"} · 60 min</p></div></div><div className="flex flex-wrap gap-2"><button onClick={() => onClient(nextClient.id)} className="h-11 rounded-full border border-white/15 px-5 text-[10px] font-black uppercase tracking-wider">Otwórz podopiecznego</button><button onClick={() => onStartWorkout(nextClient.id)} className="h-11 rounded-full bg-[#ffc400] px-6 text-[10px] font-black uppercase tracking-wider text-[#050505]">Rozpocznij trening</button></div></div></section> : null}
+      {/* Pasek statystyk — liczby mają nieść ciężar wizualny. */}
+      <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        {stats.map((stat) => (
+          <article key={stat.label} className="fb-card fb-rise p-4 sm:p-5">
+            <p className="fb-label">{stat.label}</p>
+            <p className="fb-stat-value mt-2.5">{stat.value}</p>
+            {stat.hint ? <p className="mt-1 text-[10px] text-[var(--fb-text-muted)]">{stat.hint}</p> : null}
+          </article>
+        ))}
+      </section>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_.85fr]">
-        <section className={cardClass}>
-          <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4 sm:px-6"><div><h2 className="font-black">Dzisiaj</h2><p className="text-[11px] text-black/36">Treningi pochodzą z kalendarza</p></div><button onClick={() => onNavigate("calendar")} className="text-[9px] font-black uppercase tracking-wider">Pełny kalendarz</button></div>
-          {today.length ? <div className="divide-y divide-black/[0.055]">{today.map((item) => { const client = clients.find((person) => person.id === item.clientId); if (!client) return null; const isNext = item.id === nextAppointment?.id; return <div key={item.id} className="grid grid-cols-[54px_1fr] items-center gap-3 px-5 py-4 sm:grid-cols-[62px_40px_1fr_auto] sm:px-6"><div><p className="text-sm font-black">{String(item.hour).padStart(2, "0")}:00</p><p className="text-[9px] text-black/32">60 min</p></div><div className="hidden sm:block"><Avatar initials={client.initials}/></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><button onClick={() => onClient(client.id)} className="truncate text-left text-sm font-black hover:underline">{client.name}</button>{isNext ? <Badge tone="dark">Następny</Badge> : <Badge>{item.status ?? "Zaplanowany"}</Badge>}</div><p className="truncate text-[10px] text-black/38">{client.plan}</p></div><button onClick={() => onStartWorkout(client.id)} className="col-span-2 mt-1 h-11 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white sm:col-span-1 sm:mt-0">Start</button></div>; })}</div> : <div className="p-7 text-center"><CalendarDays size={22} className="mx-auto text-black/25"/><p className="mt-3 text-sm font-black">Nie masz dziś zaplanowanych treningów</p><button onClick={onAddWorkout} className="mt-4 h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">Dodaj trening</button></div>}
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1.4fr_.6fr]">
+        {/* Harmonogram dnia. */}
+        <section className="fb-card overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--fb-border)] p-5">
+            <div>
+              <h2 className="text-base font-black tracking-[-0.02em]">Dzisiaj</h2>
+              <p className="mt-0.5 text-[11px] text-[var(--fb-text-muted)]">Treningi pochodzą z kalendarza</p>
+            </div>
+            <button onClick={() => onNavigate("calendar")} className="fb-btn fb-btn-ghost !min-h-11 !px-4">Kalendarz</button>
+          </div>
+          {today.length ? (
+            <div className="divide-y divide-[var(--fb-border)]">
+              {today.map((item) => {
+                const client = clients.find((person) => person.id === item.clientId);
+                if (!client) return null;
+                return (
+                  <div key={item.id} className="fb-rise flex flex-wrap items-center gap-3 p-4 sm:px-5">
+                    <span className="w-14 shrink-0">
+                      <span className="block text-sm font-black tabular-nums">{String(item.hour).padStart(2, "0")}:00</span>
+                      <span className="block text-[9px] text-[var(--fb-text-muted)]">60 min</span>
+                    </span>
+                    <Avatar initials={client.initials} size="sm" />
+                    <span className="min-w-0 flex-1">
+                      <button onClick={() => onClient(client.id)} className="block max-w-full truncate text-left text-sm font-black hover:underline">{client.name}</button>
+                      <span className="mt-0.5 block truncate text-[10px] text-[var(--fb-text-muted)]">{client.plan}</span>
+                    </span>
+                    <button onClick={() => onStartWorkout(client.id)} className="fb-btn fb-btn-primary !min-h-11 !px-5">Start</button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-8 text-center">
+              <CalendarDays size={22} className="mx-auto text-[var(--fb-text-muted)]" />
+              <p className="mt-3 text-sm font-black">Wolny dzień</p>
+              <p className="mt-1 text-[11px] text-[var(--fb-text-muted)]">Nie masz dziś zaplanowanych treningów.</p>
+              <button onClick={onAddWorkout} className="fb-btn fb-btn-primary mx-auto mt-5">Zaplanuj trening</button>
+            </div>
+          )}
+        </section>
+
+        {/* Skróty. */}
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          {[
+            { label: "Utwórz plan", detail: "Kreator w dwóch ścieżkach", icon: Dumbbell, action: () => onNavigate("plans") },
+            { label: "Dieta", detail: "Zapotrzebowanie i posiłki", icon: Apple, action: () => onNavigate("nutrition") },
+            { label: "Dodaj podopiecznego", detail: "Profil i kod dostępu", icon: UserPlus, action: () => onModal("client") },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <button key={item.label} onClick={item.action} className="fb-card fb-card-interactive fb-rise flex items-center gap-4 p-4 text-left">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--fb-border)] bg-[var(--fb-glass-strong)]"><Icon size={18} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-black">{item.label}</span>
+                  <span className="mt-0.5 block truncate text-[10px] text-[var(--fb-text-muted)]">{item.detail}</span>
+                </span>
+                <ChevronRight size={16} className="shrink-0 text-[var(--fb-text-muted)]" />
+              </button>
+            );
+          })}
         </section>
       </div>
-      <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4"><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Aktywni podopieczni</p><p className="mt-3 text-2xl font-black">{clients.filter((client) => client.status === "Aktywny").length}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Treningi dziś</p><p className="mt-3 text-2xl font-black">{today.length}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Bez planu diety</p><p className="mt-3 text-2xl font-black">{clientsWithoutDiet.length}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Zgodność diety dziś</p><p className="mt-3 text-2xl font-black">{dietComplianceToday === null ? "—" : `${dietComplianceToday}%`}</p></article><article className={`${cardClass} p-4`}><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Bez planu</p><p className="mt-3 text-2xl font-black">{clientsWithoutPlan.length}</p></article></section>
     </>
   );
 }
-
 function ClientsView({ clients, query, onClient, onAdd }: { clients: Client[]; query: string; onClient: (id: string) => void; onAdd: () => void }) {
   const [statusFilter, setStatusFilter] = useState<ClientStatus | "Wszyscy">("Wszyscy");
   const statuses: (ClientStatus | "Wszyscy")[] = ["Wszyscy", "Aktywny", "Do kontaktu", "Wstrzymany"];

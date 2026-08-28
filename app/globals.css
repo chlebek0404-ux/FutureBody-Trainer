@@ -1,25 +1,61 @@
 @import "tailwindcss";
 
 :root {
-  /* Ciemny motyw oparty na grafitcie z lekkim ciepłem, nie na czystej czerni.
-     Mniejsze skoki jasności między warstwami dają spokojniejszy obraz,
-     a złoty akcent pozostaje bez zmian. */
-  --background: #141315;
-  --foreground: #f2f1ee;
-  --fb-bg: #141315;
-  --fb-bg-secondary: #1a191c;
-  --fb-surface: #212023;
-  --fb-elevated: #2a292d;
-  --fb-border: rgba(255, 255, 255, 0.09);
+  /* ── Podstawa: grafit z chłodnym podbiciem, nie płaska czerń ── */
+  --background: #0c0c0f;
+  --foreground: #f2f2f0;
+  --fb-bg: #0c0c0f;
+
+  /* Warstwy powierzchni — każda o stopień jaśniejsza, budują głębię. */
+  --fb-surface-0: #121216;
+  --fb-surface-1: #17171c;
+  --fb-surface-2: #1e1e24;
+  --fb-surface-3: #26262d;
+  --fb-bg-secondary: var(--fb-surface-0);
+  --fb-surface: var(--fb-surface-1);
+  --fb-elevated: var(--fb-surface-2);
+
+  /* Szkło: półprzezroczysta powierzchnia z rozmyciem tła. */
+  --fb-glass: rgba(255, 255, 255, 0.045);
+  --fb-glass-strong: rgba(255, 255, 255, 0.075);
+  --fb-glass-blur: 20px;
+  --fb-border: rgba(255, 255, 255, 0.085);
+  --fb-border-strong: rgba(255, 255, 255, 0.16);
+  --fb-highlight: rgba(255, 255, 255, 0.06);
+
+  /* Akcent marki. */
   --fb-gold: #ffc400;
   --fb-gold-highlight: #ffd21a;
   --fb-gold-dark: #d99f00;
-  --fb-text: #f2f1ee;
-  --fb-text-secondary: #adaca8;
-  --fb-text-muted: #7b7a77;
+  --fb-glow: rgba(255, 196, 0, 0.22);
+
+  --fb-text: #f2f2f0;
+  --fb-text-secondary: #a6a6a2;
+  --fb-text-muted: #76766f;
+
   --fb-success: #35c779;
   --fb-warning: #ffb020;
   --fb-error: #ff5c5c;
+
+  /* Promienie, cienie, odstępy. */
+  --r-xs: 10px;
+  --r-sm: 14px;
+  --r-md: 18px;
+  --r-lg: 24px;
+  --r-xl: 30px;
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .3);
+  --sh-2: 0 8px 24px rgba(0, 0, 0, .32);
+  --sh-3: 0 20px 60px rgba(0, 0, 0, .45);
+  --sh-glow: 0 10px 34px var(--fb-glow);
+
+  /* Skala typograficzna. */
+  --t-display: clamp(2.6rem, 9vw, 4.25rem);
+  --t-h1: clamp(2rem, 6.5vw, 2.9rem);
+  --t-h2: clamp(1.3rem, 3.4vw, 1.65rem);
+  --t-h3: 1.05rem;
+  --t-body: 0.95rem;
+  --t-label: 0.62rem;
+
   --motion-fast: 140ms;
   --motion-base: 220ms;
   --motion-slow: 320ms;
@@ -28,19 +64,30 @@
 }
 
 :root[data-theme="light"] {
-  --background: #f4f4f2;
-  --foreground: #151516;
-  --fb-bg: #f4f4f2;
+  --background: #f3f3f1;
+  --foreground: #121215;
+  --fb-bg: #f3f3f1;
+  --fb-surface-0: #ffffff;
+  --fb-surface-1: #ffffff;
+  --fb-surface-2: #f7f7f5;
+  --fb-surface-3: #eeeeeb;
   --fb-bg-secondary: #eeeeeb;
   --fb-surface: #ffffff;
-  --fb-elevated: #111214;
-  --fb-border: rgba(5, 5, 5, 0.09);
-  --fb-text: #151516;
-  --fb-text-secondary: #5f6065;
-  --fb-text-muted: #8a8b90;
+  --fb-elevated: #ffffff;
+  --fb-glass: rgba(255, 255, 255, 0.72);
+  --fb-glass-strong: rgba(255, 255, 255, 0.88);
+  --fb-border: rgba(10, 10, 12, 0.09);
+  --fb-border-strong: rgba(10, 10, 12, 0.2);
+  --fb-highlight: rgba(10, 10, 12, 0.04);
+  --fb-text: #121215;
+  --fb-text-secondary: #55555c;
+  --fb-text-muted: #83838a;
+  --fb-glow: rgba(255, 196, 0, 0.28);
   --fb-success: #167a45;
   --fb-warning: #9a5c00;
   --fb-error: #b4232f;
+  --sh-2: 0 8px 24px rgba(18, 18, 21, .07);
+  --sh-3: 0 20px 60px rgba(18, 18, 21, .1);
 }
 
 @theme inline {
@@ -111,82 +158,106 @@ select:focus-visible {
   color: var(--fb-text);
   background: var(--fb-bg);
   color-scheme: dark;
-  transition: background-color var(--motion-base) var(--motion-ease-soft), color var(--motion-base) var(--motion-ease-soft);
+  position: relative;
+  isolation: isolate;
+}
+
+/* Światło otoczenia: dwie miękkie plamy budują głębię pod treścią.
+   `fixed` + `-1` trzyma je za interfejsem i nie kosztuje przy przewijaniu. */
+.futurebody-app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 82% -8%, rgba(255, 196, 0, 0.09), transparent 62%),
+    radial-gradient(52rem 38rem at -10% 12%, rgba(120, 150, 255, 0.055), transparent 60%);
 }
 
 :root[data-theme="light"] .futurebody-app {
   color-scheme: light;
 }
 
+:root[data-theme="light"] .futurebody-app::before {
+  background:
+    radial-gradient(60rem 40rem at 82% -8%, rgba(255, 196, 0, 0.16), transparent 62%),
+    radial-gradient(52rem 38rem at -10% 12%, rgba(120, 150, 255, 0.08), transparent 60%);
+}
+
 .futurebody-app[class*="bg-[#050505]"] {
-  background-color: var(--fb-bg) !important;
+  background-color: transparent !important;
   color: var(--fb-text) !important;
 }
 
+/* ── Powierzchnie ──────────────────────────────────────────────────────
+   Markup opisuje warstwy jasnymi kolorami; tutaj zamieniamy je na szkło
+   z obramowaniem i cieniem, dzięki czemu cała aplikacja zyskuje głębię
+   bez zmiany tysięcy klas w komponentach. */
+
+.futurebody-app :where([class*="bg-[#0b0b0d]"]) {
+  background-color: var(--fb-surface-0) !important;
+}
+
 .futurebody-app .fb-dark-surface {
-  background-color: var(--fb-bg-secondary) !important;
+  background-color: var(--fb-surface-0) !important;
   color: var(--fb-text) !important;
   color-scheme: dark;
 }
 
-/* Przyklejony nagłówek musi być nieprzezroczysty — przy półprzezroczystym tle
-   treść przewijana pod spodem prześwitywała przez pasek wyszukiwania. */
 .futurebody-app .fb-dark-surface[class*="bg-[#050505]"] {
-  background-color: var(--fb-bg) !important;
+  background-color: color-mix(in srgb, var(--fb-bg) 88%, transparent) !important;
+  backdrop-filter: none;
 }
 
-.futurebody-app .fb-dark-surface[class*="bg-[#111214]"] {
-  background-color: var(--fb-surface) !important;
-}
-
-/* Pozostałe ciemne tła zapisane wprost w komponentach mapujemy na warstwy motywu,
-   żeby cała aplikacja zmieniała się razem z paletą, a nie fragmentami. */
-.futurebody-app :where([class*="bg-[#0b0b0d]"]) {
-  background-color: var(--fb-bg-secondary) !important;
-}
-
+/* Karty i panele: szkło zamiast płaskiej bieli. */
+.futurebody-app .bg-white,
 .futurebody-app :where([class*="bg-[#111214]"], [class*="bg-[#0d0d0d]"], [class*="bg-[#090909]"]) {
-  background-color: var(--fb-surface) !important;
+  background-color: var(--fb-glass) !important;
+  background-image: linear-gradient(180deg, var(--fb-highlight), transparent 42%);
+  color: var(--fb-text) !important;
+  border-color: var(--fb-border) !important;
+  backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.25);
+}
+
+/* Wgłębione pola: nieco ciemniejsze niż karta, bez rozmycia. */
+.futurebody-app :where([class*="bg-[#f4f4f2]"], [class*="bg-[#f3f3f1]"], [class*="bg-[#f2f2f0]"], [class*="bg-[#f1f1ef]"], [class*="bg-[#f0f0ee]"], [class*="bg-[#f7f7f5]"], [class*="bg-[#fafaf8]"], [class*="bg-[#ededeb]"], [class*="bg-[#eeeeec]"], [class*="bg-[#f5f5f3]"], [class*="bg-[#efefed]"], [class*="bg-[#e9e9e7]"]) {
+  background-color: rgba(255, 255, 255, 0.055) !important;
+  color: var(--fb-text) !important;
 }
 
 .futurebody-app :where([class*="bg-[#17181b]"], [class*="bg-[#181818]"]) {
-  background-color: var(--fb-elevated) !important;
+  background-color: var(--fb-surface-2) !important;
 }
 
+/* Element aktywny / wybrany — złoty gradient z poświatą. */
 .futurebody-app .fb-selected {
   border-color: var(--fb-gold-dark) !important;
   background: linear-gradient(180deg, var(--fb-gold-highlight), var(--fb-gold)) !important;
-  color: #050505 !important;
-  box-shadow: 0 10px 28px rgba(255, 196, 0, 0.14);
+  color: #0c0c0f !important;
+  box-shadow: var(--sh-glow);
 }
 
 .futurebody-app .fb-selected :where([class*="text-white"], [class*="text-black/"]) {
-  color: rgba(5, 5, 5, 0.58) !important;
+  color: rgba(12, 12, 15, 0.66) !important;
 }
 
 .futurebody-app .fb-selected .bg-white {
-  background-color: rgba(5, 5, 5, 0.1) !important;
-  color: #050505 !important;
+  background: rgba(12, 12, 15, 0.14) !important;
 }
 
-.futurebody-app .bg-white {
-  background-color: var(--fb-surface) !important;
-}
-
-.futurebody-app .bg-black {
-  background-color: var(--fb-elevated) !important;
-}
-
-.futurebody-app :where([class*="bg-[#f4f4f2]"], [class*="bg-[#f3f3f1]"], [class*="bg-[#f2f2f0]"], [class*="bg-[#f1f1ef]"], [class*="bg-[#f0f0ee]"], [class*="bg-[#f7f7f5]"], [class*="bg-[#fafaf8]"], [class*="bg-[#ededeb]"], [class*="bg-[#eeeeec]"], [class*="bg-[#f5f5f3]"], [class*="bg-[#efefed]"], [class*="bg-[#e9e9e7]"]) {
-  background-color: var(--fb-bg-secondary) !important;
-}
-
+/* Tekst i krawędzie z markupu jasnego na tokeny motywu. */
 .futurebody-app .text-black {
   color: var(--fb-text) !important;
 }
 
 .futurebody-app :where([class*="text-black/"]) {
   color: var(--fb-text-secondary) !important;
+}
+
+.futurebody-app :where([class*="text-black/2"], [class*="text-black/3"]) {
+  color: var(--fb-text-muted) !important;
 }
 
 .futurebody-app :where([class*="border-black/"]) {
@@ -197,22 +268,236 @@ select:focus-visible {
   border-color: var(--fb-border) !important;
 }
 
+/* Główne przyciski akcji: złoto z poświatą i wyraźną reakcją na dotyk. */
 .futurebody-app button.bg-black,
 .futurebody-app a.bg-black {
   background: linear-gradient(180deg, var(--fb-gold-highlight), var(--fb-gold)) !important;
-  color: #050505 !important;
-  box-shadow: 0 10px 30px rgba(255, 196, 0, 0.12);
+  color: #0c0c0f !important;
+  box-shadow: var(--sh-glow);
+}
+
+.futurebody-app button.bg-black:hover:not(:disabled),
+.futurebody-app a.bg-black:hover {
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--fb-gold) 34%, transparent);
+  filter: brightness(1.04);
 }
 
 .futurebody-app button.bg-black :where([class*="text-white"], [class*="text-black/"]),
 .futurebody-app a.bg-black :where([class*="text-white"], [class*="text-black/"]) {
-  color: rgba(5, 5, 5, 0.6) !important;
+  color: rgba(12, 12, 15, 0.68) !important;
 }
 
 .futurebody-app button.bg-black .bg-white,
 .futurebody-app a.bg-black .bg-white {
-  background-color: rgba(5, 5, 5, 0.1) !important;
-  color: #050505 !important;
+  background: rgba(12, 12, 15, 0.16) !important;
+  backdrop-filter: none;
+}
+
+/* Sekcje na czarnym tle w markupie to panele wyróżnione. */
+.futurebody-app section.bg-black,
+.futurebody-app div.bg-black:not(.fb-selected) {
+  background: linear-gradient(160deg, var(--fb-surface-2), var(--fb-surface-0)) !important;
+  border: 1px solid var(--fb-border);
+  color: var(--fb-text) !important;
+}
+
+/* ═══ Prymitywy systemu projektowego ═══════════════════════════════════ */
+
+.fb-glass {
+  background-color: var(--fb-glass);
+  background-image: linear-gradient(180deg, var(--fb-highlight), transparent 45%);
+  border: 1px solid var(--fb-border);
+  backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.25);
+  border-radius: var(--r-lg);
+}
+
+.fb-panel {
+  background: linear-gradient(160deg, var(--fb-surface-2), var(--fb-surface-0));
+  border: 1px solid var(--fb-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+}
+
+.fb-card {
+  background-color: var(--fb-glass);
+  background-image: linear-gradient(180deg, var(--fb-highlight), transparent 45%);
+  border: 1px solid var(--fb-border);
+  border-radius: var(--r-lg);
+  backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.2);
+  transition: border-color var(--motion-base) var(--motion-ease-soft), transform var(--motion-base) var(--motion-ease), box-shadow var(--motion-base) var(--motion-ease);
+}
+
+.fb-card-interactive:hover {
+  border-color: var(--fb-border-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--sh-2);
+}
+
+.fb-stat-value {
+  font-size: clamp(1.9rem, 5vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: -0.055em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.fb-label {
+  font-size: var(--t-label);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--fb-text-muted);
+}
+
+.fb-display {
+  font-size: var(--t-display);
+  font-weight: 800;
+  letter-spacing: -0.055em;
+  line-height: 0.94;
+  text-wrap: balance;
+}
+
+.fb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 1.35rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.fb-btn-primary {
+  background: linear-gradient(180deg, var(--fb-gold-highlight), var(--fb-gold));
+  color: #0c0c0f;
+  box-shadow: var(--sh-glow);
+}
+
+.fb-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--fb-gold) 34%, transparent);
+}
+
+.fb-btn-ghost {
+  background: var(--fb-glass);
+  border-color: var(--fb-border);
+  color: var(--fb-text);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.fb-btn-ghost:hover:not(:disabled) {
+  border-color: var(--fb-border-strong);
+  background: var(--fb-glass-strong);
+}
+
+.fb-btn:disabled { opacity: 0.4; box-shadow: none; }
+
+@keyframes fb-shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+.fb-skeleton {
+  border-radius: var(--r-sm);
+  background: linear-gradient(90deg, var(--fb-glass) 25%, var(--fb-glass-strong) 37%, var(--fb-glass) 63%);
+  background-size: 200% 100%;
+  animation: fb-shimmer 1.4s linear infinite;
+}
+
+@keyframes fb-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+.fb-rise { animation: fb-rise var(--motion-slow) var(--motion-ease) backwards; }
+.fb-rise:nth-child(1) { animation-delay: 0ms; }
+.fb-rise:nth-child(2) { animation-delay: 45ms; }
+.fb-rise:nth-child(3) { animation-delay: 90ms; }
+.fb-rise:nth-child(4) { animation-delay: 135ms; }
+.fb-rise:nth-child(5) { animation-delay: 180ms; }
+.fb-rise:nth-child(n+6) { animation-delay: 220ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-skeleton { animation: none; }
+  .fb-rise { animation: none !important; opacity: 1 !important; transform: none !important; }
+}
+
+/* ── Nawigacja ─────────────────────────────────────────────────────────
+   Aktywna pozycja to szkło z pionową listwą akcentu, nie pełne wypełnienie —
+   czytelniejsze przy dłuższych listach i spokojniejsze wizualnie. */
+.fb-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 0.85rem;
+  border-radius: var(--r-sm);
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--fb-text-secondary);
+  border: 1px solid transparent;
+  transition: color var(--motion-fast) var(--motion-ease-soft), background-color var(--motion-fast) var(--motion-ease-soft), border-color var(--motion-fast) var(--motion-ease-soft);
+}
+
+.fb-nav-item:hover { color: var(--fb-text); background: var(--fb-glass); }
+
+.fb-nav-item-active {
+  color: var(--fb-text);
+  background: var(--fb-glass-strong);
+  border-color: var(--fb-border);
+  font-weight: 800;
+}
+
+.fb-nav-rail {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--fb-gold);
+  transform: translateY(-50%);
+  transition: height var(--motion-base) var(--motion-ease);
+}
+
+.fb-nav-item-active .fb-nav-rail { height: 58%; box-shadow: 0 0 14px var(--fb-glow); }
+
+.fb-nav-item-active :where(svg) { color: var(--fb-gold); }
+
+/* Dolny pasek na telefonie. */
+.fb-tab {
+  display: flex;
+  min-height: 50px;
+  min-width: 54px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  border-radius: var(--r-sm);
+  padding: 0.35rem 0.4rem;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--fb-text-muted);
+  transition: color var(--motion-fast) var(--motion-ease-soft), background-color var(--motion-fast) var(--motion-ease-soft);
+}
+
+.fb-tab-active {
+  color: var(--fb-gold);
+  background: color-mix(in srgb, var(--fb-gold) 12%, transparent);
+  font-weight: 800;
 }
 
 .futurebody-app input,
