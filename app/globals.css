@@ -18,6 +18,8 @@
   /* Szkło: półprzezroczysta powierzchnia z rozmyciem tła. */
   --fb-glass: rgba(255, 255, 255, 0.045);
   --fb-glass-strong: rgba(255, 255, 255, 0.075);
+  --fb-inset: rgba(255, 255, 255, 0.055);
+  --fb-card-blur: blur(var(--fb-glass-blur)) saturate(1.25);
   --fb-glass-blur: 20px;
   --fb-border: rgba(255, 255, 255, 0.085);
   --fb-border-strong: rgba(255, 255, 255, 0.16);
@@ -74,8 +76,12 @@
   --fb-bg-secondary: #eeeeeb;
   --fb-surface: #ffffff;
   --fb-elevated: #ffffff;
-  --fb-glass: rgba(255, 255, 255, 0.72);
-  --fb-glass-strong: rgba(255, 255, 255, 0.88);
+  /* Jasny motyw: powierzchnie nieprzezroczyste. Karty bywają rysowane nad
+     ciemnym przyciemnieniem okien modalnych, gdzie przezroczystość brudzi kolor. */
+  --fb-glass: #ffffff;
+  --fb-glass-strong: #ffffff;
+  --fb-inset: #f0f0ed;
+  --fb-card-blur: none;
   --fb-border: rgba(10, 10, 12, 0.09);
   --fb-border-strong: rgba(10, 10, 12, 0.2);
   --fb-highlight: rgba(10, 10, 12, 0.04);
@@ -217,13 +223,13 @@ select:focus-visible {
   background-image: linear-gradient(180deg, var(--fb-highlight), transparent 42%);
   color: var(--fb-text) !important;
   border-color: var(--fb-border) !important;
-  backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.25);
-  -webkit-backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.25);
+  backdrop-filter: var(--fb-card-blur);
+  -webkit-backdrop-filter: var(--fb-card-blur);
 }
 
 /* Wgłębione pola: nieco ciemniejsze niż karta, bez rozmycia. */
 .futurebody-app :where([class*="bg-[#f4f4f2]"], [class*="bg-[#f3f3f1]"], [class*="bg-[#f2f2f0]"], [class*="bg-[#f1f1ef]"], [class*="bg-[#f0f0ee]"], [class*="bg-[#f7f7f5]"], [class*="bg-[#fafaf8]"], [class*="bg-[#ededeb]"], [class*="bg-[#eeeeec]"], [class*="bg-[#f5f5f3]"], [class*="bg-[#efefed]"], [class*="bg-[#e9e9e7]"]) {
-  background-color: rgba(255, 255, 255, 0.055) !important;
+  background-color: var(--fb-inset) !important;
   color: var(--fb-text) !important;
 }
 
@@ -291,6 +297,40 @@ select:focus-visible {
 .futurebody-app a.bg-black .bg-white {
   background: rgba(12, 12, 15, 0.16) !important;
   backdrop-filter: none;
+}
+
+/* ── Jasny motyw: elementy zaprojektowane jako ciemne pozostają ciemne ──
+   Powłoka aplikacji (panel boczny, nagłówek) i panele wyróżnione mają
+   w markupie biały tekst. Gdyby przejęły jasne powierzchnie motywu,
+   tekst zniknąłby na białym tle. */
+:root[data-theme="light"] .futurebody-app .fb-dark-surface {
+  background-color: #16161a !important;
+  color: #f2f2f0 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] .futurebody-app .fb-dark-surface[class*="bg-[#050505]"] {
+  background-color: #101014 !important;
+}
+
+:root[data-theme="light"] .futurebody-app .fb-dark-surface :where([class*="text-black/"]) {
+  color: rgba(242, 242, 240, 0.55) !important;
+}
+
+:root[data-theme="light"] .futurebody-app .fb-dark-surface .text-black {
+  color: #f2f2f0 !important;
+}
+
+:root[data-theme="light"] .futurebody-app .fb-dark-surface :where([class*="border-black/"]) {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+:root[data-theme="light"] .futurebody-app section.bg-black,
+:root[data-theme="light"] .futurebody-app div.bg-black:not(.fb-selected) {
+  background: linear-gradient(160deg, #1d1d22, #121216) !important;
+  color: #f2f2f0 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
 }
 
 /* Stan wyłączony: neutralna powierzchnia zamiast przygaszonego złota. */

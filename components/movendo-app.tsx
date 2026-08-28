@@ -156,11 +156,11 @@ function PageHeader({ title, subtitle, action, onAction, secondary }: { title: s
 
 function EmptyState({ icon: Icon, title, text }: { icon: LucideIcon; title: string; text: string }) {
   return (
-    <div className="grid min-h-[280px] place-items-center text-center">
+    <div className="grid place-items-center px-6 py-12 text-center">
       <div>
-        <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-black text-white"><Icon size={19} /></div>
-        <h3 className="mt-4 font-black">{title}</h3>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-black/40">{text}</p>
+        <div className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-[var(--fb-border)] bg-[var(--fb-glass-strong)] text-[var(--fb-text-secondary)]"><Icon size={18} /></div>
+        <h3 className="mt-4 text-sm font-black">{title}</h3>
+        <p className="mx-auto mt-1.5 max-w-xs text-[12px] leading-5 text-[var(--fb-text-muted)]">{text}</p>
       </div>
     </div>
   );
