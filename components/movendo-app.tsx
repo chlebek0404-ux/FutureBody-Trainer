@@ -863,6 +863,12 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     navigate("calendar");
   }
 
+  // Każde wejście w nowy ekran zaczyna się od góry. Bez tego po przewinięciu
+  // na dół kolejny widok otwierał się w tym samym miejscu przewinięcia.
+  function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
   function navigate(view: View) {
     if (view !== "calendar") setCalendarIntent(false);
     setActiveView(view);
@@ -871,6 +877,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     setSelectedPlanId(null);
     setMobileMenu(false);
     setMoreNavigationOpen(false);
+    scrollToTop();
     updateRoute(view);
   }
 
@@ -880,6 +887,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     setTrainerWorkout(null);
     setSelectedPlanId(null);
     setMobileMenu(false);
+    scrollToTop();
     updateRoute(`clients/${clientId}`);
   }
 
@@ -895,6 +903,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     setTrainerWorkout(route);
     setSelectedClient(null);
     setSelectedPlanId(null);
+    scrollToTop();
     updateRoute(`workouts/${clientId}/${plan.id}/${day.id}`);
   }
 
@@ -909,6 +918,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     setSelectedPlanId(plan.id);
     setSelectedClient(null);
     setTrainerWorkout(null);
+    scrollToTop();
     updateRoute(`plans/${plan.id}`);
   }
 
@@ -917,6 +927,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     setSelectedPlanId(planId);
     setSelectedClient(null);
     setTrainerWorkout(null);
+    scrollToTop();
     updateRoute(`plans/${planId}`);
   }
 
