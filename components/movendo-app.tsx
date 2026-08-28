@@ -14,7 +14,6 @@ import {
   CheckSquare,
   ChevronLeft,
   ChevronRight,
-  Download,
   Dumbbell,
   Eye,
   EyeOff,
@@ -66,7 +65,6 @@ import { calculateTargets, complianceForDay, sumMeals, todayKey, type MealLog, t
 import { ClientWorkout } from "@/components/client-workout";
 import { exerciseLibrary, searchExercises, suggestExercises } from "@/lib/exercise-library";
 import { createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
-import { downloadMovendoPdf } from "@/lib/pdf-export";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { enableSmoothWheelScroll } from "@/lib/smooth-scroll";
 import { buildPreviewWorkspace, isPreviewBuild, matchPreviewAccount, previewClientEmail, previewClientId, previewTrainerEmail } from "@/lib/preview-workspace";
@@ -486,7 +484,9 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<typeof initialTasks>(() => readStoredJson("futurebody_tasks", []));
-  const [modal, setModal] = useState<ModalType>(null);
+  const [modal, setModal] = useState<{ type: ModalType; clientId?: string }>({ type: null });
+  const [measurements, setMeasurements] = useState<Measurement[]>(() => readStoredJson("futurebody_measurements", []));
+  const [planIntentClientId, setPlanIntentClientId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selectedConversation, setSelectedConversation] = useState("");
   const [chatMessages, setChatMessages] = useState<string[]>([]);
@@ -662,7 +662,8 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.localStorage.setItem("futurebody_invitations", JSON.stringify(invitations));
     window.localStorage.setItem("futurebody_nutrition_plans", JSON.stringify(nutritionPlans));
     window.localStorage.setItem("futurebody_meal_logs", JSON.stringify(mealLogs));
-  }, [clients, invitations, mealLogs, nutritionPlans, tasks, workoutHistory, workoutPlans]);
+    window.localStorage.setItem("futurebody_measurements", JSON.stringify(measurements));
+  }, [clients, invitations, mealLogs, measurements, nutritionPlans, tasks, workoutHistory, workoutPlans]);
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -716,6 +717,27 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
         ? { ...log, completedMealIds: done ? log.completedMealIds.filter((id) => id !== mealId) : [...log.completedMealIds, mealId] }
         : log);
     });
+  }
+
+  /** Zapisuje pomiar i odświeża kartę podopiecznego, żeby wynik był od razu widoczny. */
+  function saveMeasurement(payload: Record<string, string>) {
+    const clientId = payload.clientId;
+    if (!clientId) { notify("Wskaż podopiecznego."); return; }
+    const weight = (payload.weight ?? "").trim();
+    const bodyFat = (payload.bodyfat ?? "").trim();
+    if (!weight && !bodyFat) { notify("Podaj masę ciała albo tkankę tłuszczową."); return; }
+    const date = new Intl.DateTimeFormat("pl-PL").format(new Date());
+    setMeasurements((current) => [{ id: `m${Date.now()}`, clientId, date, weight, bodyFat, note: (payload.note ?? "").trim() }, ...current]);
+    setClients((current) => current.map((client) => client.id === clientId
+      ? { ...client, weight: weight ? `${weight} kg` : client.weight, bodyFat: bodyFat ? `${bodyFat}%` : client.bodyFat, lastCheckin: `Pomiar ${date}` }
+      : client));
+    notify("Pomiar zapisany");
+  }
+
+  /** Wejście do kreatora planu prosto z profilu podopiecznego. */
+  function startPlanForClient(clientId: string) {
+    setPlanIntentClientId(clientId);
+    navigate("plans");
   }
 
   function notify(text: string) {
@@ -913,6 +935,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   function navigate(view: View) {
     if (view !== "calendar") setCalendarIntent(false);
     if (view !== "nutrition") setNutritionClientId(null);
+    if (view !== "plans") setPlanIntentClientId(null);
     setActiveView(view);
     setSelectedClient(null);
     setTrainerWorkout(null);
@@ -1044,46 +1067,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     return true;
   }
 
-  function exportWeeklyReport(weekLabel = "Bieżący tydzień") {
-    const completed = workoutHistory.length;
-    downloadMovendoPdf({
-      title: "Raport tygodniowy trenera",
-      subtitle: `${weekLabel} | wygenerowano ${new Intl.DateTimeFormat("pl-PL").format(new Date())}`,
-      filename: "FutureBody-raport-tygodniowy.pdf",
-      metrics: [
-        { label: "Podopieczni", value: String(clients.length) },
-        { label: "Treningi w kalendarzu", value: String(appointments.length) },
-        { label: "Ukończone treningi", value: String(completed) },
-        { label: "Regularność", value: "91%" },
-      ],
-      sections: [
-        { title: "Podsumowanie tygodnia", rows: ["Realizacja planów: 87%", "Frekwencja spotkań: 92%", "Odebrane check-iny: 78%", "Największy postęp: siła dolnej części ciała (+14%)"] },
-        { title: "Podopieczni wymagający uwagi", rows: clients.slice(0, 6).map((client) => `${client.name} | ${client.goal} | plan: ${client.plan} | realizacja: ${client.progress}%`) },
-        { title: "Najbliższe działania", rows: tasks.filter((task) => !task.done).slice(0, 8).map((task) => `${task.due} | ${task.title} | priorytet: ${task.priority}`) },
-      ],
-    });
-    notify("Raport tygodniowy PDF został utworzony");
-  }
 
-  function exportAllData() {
-    downloadMovendoPdf({
-      title: "Eksport danych FutureBody Trainer",
-      subtitle: `Kompletne podsumowanie | ${new Intl.DateTimeFormat("pl-PL").format(new Date())}`,
-      filename: "FutureBody-eksport-danych.pdf",
-      metrics: [
-        { label: "Podopieczni", value: String(clients.length) },
-        { label: "Programy", value: String(workoutPlans.length) },
-        { label: "Terminy", value: String(appointments.length) },
-        { label: "Treningi zapisane", value: String(workoutHistory.length) },
-      ],
-      sections: [
-        { title: "Podopieczni", rows: clients.map((client) => `${client.name} | ${client.email || "brak e-mail"} | cel: ${client.goal} | plan: ${client.plan} | postęp: ${client.progress}%`) },
-        { title: "Plany treningowe", rows: workoutPlans.map((plan) => `${plan.name} | ${plan.days} dni | ${plan.exercises} ćwiczeń | ${plan.duration} | realizacja: ${plan.completion}%`) },
-        { title: "Historia kalendarza", rows: [...appointments].sort((a, b) => `${a.date}-${a.hour}`.localeCompare(`${b.date}-${b.hour}`)).map((item) => { const client = clients.find((candidate) => candidate.id === item.clientId); return `${formatCalendarDate(item.date)} ${String(item.hour).padStart(2, "0")}:00 | ${client?.name ?? "Podopieczny"}`; }) },
-      ],
-    });
-    notify("Czytelny eksport danych PDF został pobrany");
-  }
 
   const normalizedQuery = query.trim().toLowerCase();
   const searchResults = normalizedQuery ? [
@@ -1198,7 +1182,9 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
               client={currentClient}
               invitation={invitations.find((item) => item.clientId === currentClient.id && item.status === "active")}
               onBack={() => navigate("clients")}
-              onAction={(type) => setModal(type)}
+              measurements={measurements.filter((entry) => entry.clientId === currentClient.id)}
+              onAction={(type) => setModal({ type, clientId: currentClient.id })}
+              onCreatePlan={() => startPlanForClient(currentClient.id)}
               onOpenCalendar={() => navigate("calendar")}
               onOpenPlan={() => openPlanForClient(currentClient.id)}
               onStartWorkout={() => startTrainerWorkout(currentClient.id)}
@@ -1207,7 +1193,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
               notify={notify}
             />
           ) : (
-            <ViewRenderer view={activeView} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} onAddWorkout={openScheduling} calendarIntent={calendarIntent} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={setModal} notify={notify} selectedConversation={selectedConversation} setSelectedConversation={setSelectedConversation} chatMessages={chatMessages} setChatMessages={setChatMessages} message={message} setMessage={setMessage} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onExportWeekly={exportWeeklyReport} onExportAll={exportAllData} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
+            <ViewRenderer view={activeView} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} onAddWorkout={openScheduling} calendarIntent={calendarIntent} planIntentClientId={planIntentClientId} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={(type) => setModal({ type })} notify={notify} selectedConversation={selectedConversation} setSelectedConversation={setSelectedConversation} chatMessages={chatMessages} setChatMessages={setChatMessages} message={message} setMessage={setMessage} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
           )}
           </div>
         </main>
@@ -1218,16 +1204,15 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
         <button onClick={() => { setMoreNavigationOpen(true); setMobileMenu(true); }} className={`flex min-h-12 min-w-[52px] flex-col items-center justify-center gap-1 rounded-[16px] px-1.5 py-1.5 text-[8px] font-bold ${secondaryActive ? "bg-[#ffc400] text-[#050505]" : "text-white/42"}`}><MoreHorizontal size={17}/><span>Więcej</span></button>
       </nav> : null}
 
-      {modal ? <ActionModal type={modal} onClose={() => setModal(null)} onSave={(payload) => {
-        if (modal === "client" && payload.name) {
+      {modal.type ? <ActionModal type={modal.type} clients={clients} presetClient={clients.find((client) => client.id === modal.clientId) ?? null} onClose={() => setModal({ type: null })} onSave={(payload) => {
+        if (modal.type === "measurement") { saveMeasurement(payload); setModal({ type: null }); return; }
+        if (modal.type === "client" && payload.name) {
           const names = payload.name.split(" ");
           const newClient: Client = { id: `c${Date.now()}`, name: payload.name, initials: names.map((part) => part[0]).join("").slice(0, 2).toUpperCase(), email: payload.email || "", phone: payload.phone || "", status: "Aktywny", goal: payload.goal || "Cel do ustalenia", plan: "Brak planu", nextSession: "Brak terminu", progress: 0, joined: "26.08.2026", lastCheckin: "Brak", weight: "—", bodyFat: "—", attendance: "—", tags: ["Nowy podopieczny"] };
           setClients((current) => [newClient, ...current]);
           createInvitation(newClient);
-        } else {
-          notify("Zapisano zmiany");
         }
-        setModal(null);
+        setModal({ type: null });
       }} /> : null}
       {inviteDialog ? <InvitationDialog invitation={inviteDialog} onClose={() => setInviteDialog(null)} onCopy={copyText} /> : null}
       {toast ? <div role="status" aria-live="polite" className="ui-toast fixed inset-x-4 bottom-[max(6.5rem,calc(env(safe-area-inset-bottom)+6rem))] z-[70] mx-auto flex max-w-sm items-center gap-2.5 rounded-[16px] border border-white/10 bg-[#17181b] px-4 py-3.5 text-xs font-bold text-white shadow-2xl sm:inset-x-auto sm:right-4 sm:bottom-6 sm:mx-0 lg:bottom-6"><Check size={15} className="text-[#ffc400]"/> {toast}</div> : null}
@@ -1238,13 +1223,13 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
 function ViewRenderer(props: {
   view: View; clients: Client[]; setClients: React.Dispatch<React.SetStateAction<Client[]>>; query: string; onClient: (id: string) => void;
   onStartWorkout: (clientId: string) => void; onOpenPlan: (planId: string) => void; onNavigate: (view: View) => void;
-  selectedPlanId: string | null; onAddWorkout: () => void; calendarIntent: boolean;
+  selectedPlanId: string | null; onAddWorkout: () => void; calendarIntent: boolean; planIntentClientId: string | null;
   tasks: typeof initialTasks; setTasks: React.Dispatch<React.SetStateAction<typeof initialTasks>>; onModal: (type: ModalType) => void; notify: (text: string) => void;
   selectedConversation: string; setSelectedConversation: (id: string) => void; chatMessages: string[]; setChatMessages: React.Dispatch<React.SetStateAction<string[]>>; message: string; setMessage: (value: string) => void;
   appointments: CalendarAppointment[]; onSchedule: (input: { id?: string; date: string; hour: number; clientId: string }) => void;
   onCancelAppointment: (id: string) => void; onDeleteAppointment: (id: string) => void;
   workoutPlans: TrainingProgram[]; onSavePlan: (plan: TrainingProgram, clientId: string) => void; onUpdatePlan: (plan: TrainingProgram) => void;
-  workoutHistory: WorkoutCompletion[]; onExportWeekly: (weekLabel?: string) => void; onExportAll: () => void; onEnablePhoneNotifications: () => Promise<boolean>;
+  workoutHistory: WorkoutCompletion[]; onEnablePhoneNotifications: () => Promise<boolean>;
   themePreference: ThemePreference; onThemeChange: (theme: ThemePreference) => void;
   profile: TrainerProfile; onProfileChange: (profile: TrainerProfile) => void;
   nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; nutritionClient: Client | null;
@@ -1255,7 +1240,7 @@ function ViewRenderer(props: {
     case "dashboard": return <Dashboard clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
     case "clients": return <ClientsView clients={props.clients} query={props.query} onClient={props.onClient} onAdd={() => props.onModal("client")} />;
     case "calendar": return <CalendarView clients={props.clients} appointments={props.appointments} onSchedule={props.onSchedule} onOpenClient={props.onClient} onStartWorkout={props.onStartWorkout} onCancel={props.onCancelAppointment} onDelete={props.onDeleteAppointment} autoSchedule={props.calendarIntent} />;
-    case "plans": return <PlansView clients={props.clients} workoutPlans={props.workoutPlans} initialPlanId={props.selectedPlanId} onOpenDetail={props.onOpenPlan} onCloseDetail={() => props.onNavigate("plans")} onSavePlan={props.onSavePlan} onUpdatePlan={props.onUpdatePlan} notify={props.notify} />;
+    case "plans": return <PlansView clients={props.clients} workoutPlans={props.workoutPlans} initialPlanId={props.selectedPlanId} onOpenDetail={props.onOpenPlan} onCloseDetail={() => props.onNavigate("plans")} onSavePlan={props.onSavePlan} onUpdatePlan={props.onUpdatePlan} notify={props.notify} planIntentClientId={props.planIntentClientId} />;
     case "exercises": return <ExercisesView />;
     case "progress": return <ProgressView clients={props.clients} workoutHistory={props.workoutHistory} onMeasurement={() => props.onModal("measurement")} />;
     case "checkins": return <CheckinsView notify={props.notify} />;
@@ -1265,8 +1250,8 @@ function ViewRenderer(props: {
       : <NutritionView clients={props.clients} plans={props.nutritionPlans} logs={props.mealLogs} onOpen={props.onOpenNutrition} />;
     case "automations": return <AutomationsView notify={props.notify} />;
     case "materials": return <MaterialsView notify={props.notify} />;
-    case "reports": return <ReportsView clients={props.clients} appointments={props.appointments} workoutHistory={props.workoutHistory} onExport={props.onExportWeekly} />;
-    case "settings": return <SettingsView notify={props.notify} onExport={props.onExportAll} onEnablePhoneNotifications={props.onEnablePhoneNotifications} themePreference={props.themePreference} onThemeChange={props.onThemeChange} profile={props.profile} onProfileChange={props.onProfileChange} />;
+    case "reports": return <ReportsView clients={props.clients} appointments={props.appointments} workoutHistory={props.workoutHistory} />;
+    case "settings": return <SettingsView notify={props.notify} onEnablePhoneNotifications={props.onEnablePhoneNotifications} themePreference={props.themePreference} onThemeChange={props.onThemeChange} profile={props.profile} onProfileChange={props.onProfileChange} />;
   }
 }
 
@@ -1318,7 +1303,7 @@ function ClientsView({ clients, query, onClient, onAdd }: { clients: Client[]; q
 }
 
 
-function ClientProfile({ client, invitation, onBack, onAction, onOpenCalendar, onOpenPlan, onStartWorkout, onNewInvitation, onCopy, notify }: { client: Client; invitation?: ClientInvitation; onBack: () => void; onAction: (type: ModalType) => void; onOpenCalendar: () => void; onOpenPlan: () => void; onStartWorkout: () => void; onNewInvitation: () => void; onCopy: (value: string, label: string) => void; notify: (text: string) => void }) {
+function ClientProfile({ client, invitation, measurements, onBack, onAction, onCreatePlan, onOpenCalendar, onOpenPlan, onStartWorkout, onNewInvitation, onCopy, notify }: { client: Client; invitation?: ClientInvitation; measurements: Measurement[]; onBack: () => void; onAction: (type: ModalType) => void; onCreatePlan: () => void; onOpenCalendar: () => void; onOpenPlan: () => void; onStartWorkout: () => void; onNewInvitation: () => void; onCopy: (value: string, label: string) => void; notify: (text: string) => void }) {
   const [tab, setTab] = useState<"overview" | "plan" | "history" | "progress" | "notes">("overview");
   const [note, setNote] = useState("");
   const profileTabs = [
@@ -1337,11 +1322,11 @@ function ClientProfile({ client, invitation, onBack, onAction, onOpenCalendar, o
 
     {tab === "overview" ? <div className="grid gap-4 xl:grid-cols-[1.25fr_.75fr]"><div className="space-y-4"><section className="fb-dark-surface rounded-[26px] bg-[#0b0b0d] p-6 text-white sm:p-7"><div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/35">Aktywny plan</p><h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">{client.plan}</h2><p className="mt-2 text-xs text-white/42">Cel: {client.goal}</p></div><div className="flex gap-2"><button onClick={onOpenPlan} className="h-11 rounded-full border border-white/15 px-5 text-[9px] font-black uppercase">Otwórz plan</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-[#ffc400] px-5 text-[9px] font-black uppercase text-[#050505]">Start</button></div></div><div className="mt-6"><div className="mb-2 flex justify-between text-[9px]"><span className="text-white/38">Realizacja programu</span><strong>{client.progress}%</strong></div><div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#ffc400]" style={{ width: `${client.progress}%` }}/></div></div></section><section className={`${cardClass} p-5 sm:p-6`}><div className="flex items-center justify-between"><div><h2 className="font-black">Najważniejsze dane</h2><p className="text-[10px] text-black/36">Jedno źródło informacji o współpracy</p></div><button onClick={() => onAction("measurement")} className="h-10 rounded-full border border-black/10 px-4 text-[9px] font-black uppercase">Dodaj pomiar</button></div><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Następny trening", client.nextSession], ["Masa", client.weight], ["Tkanka tłuszczowa", client.bodyFat], ["Frekwencja", client.attendance]].map(([label, value]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase tracking-wider text-black/30">{label}</p><p className="mt-2 text-sm font-black">{value}</p></div>)}</div></section></div><aside className="space-y-4"><section className={`${cardClass} p-5`}><h2 className="font-black">Profil współpracy</h2><dl className="mt-4 space-y-4">{[["Cel", client.goal], ["Dołączył", client.joined], ["Ostatni check-in", client.lastCheckin], ["Telefon", client.phone || "Brak"]].map(([label, value]) => <div key={label}><dt className="text-[8px] font-black uppercase tracking-wider text-black/30">{label}</dt><dd className="mt-1 text-xs font-bold">{value}</dd></div>)}</dl><div className="mt-5 flex flex-wrap gap-1.5">{client.tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</div></section><InvitationCard invitation={invitation} clientName={client.name} onNew={onNewInvitation} onCopy={onCopy}/></aside></div> : null}
 
-    {tab === "plan" ? <section className={`${cardClass} p-5 sm:p-7`}><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/30">Aktualny program</p><h2 className="mt-2 text-2xl font-black">{client.plan}</h2><p className="mt-1 text-xs text-black/40">{client.goal} · realizacja {client.progress}%</p></div><div className="flex gap-2"><button onClick={onOpenPlan} className="h-11 rounded-full border border-black/10 px-5 text-[9px] font-black uppercase">Edytuj plan</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">Rozpocznij trening</button></div></div><div className="mt-6"><ProgressBar value={client.progress}/></div></section> : null}
+    {tab === "plan" ? <section className={`${cardClass} p-5 sm:p-7`}><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/30">Aktualny program</p><h2 className="mt-2 text-2xl font-black">{client.plan}</h2><p className="mt-1 text-xs text-black/40">{client.goal} · realizacja {client.progress}%</p></div><div className="flex flex-wrap gap-2"><button onClick={onCreatePlan} className="h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">{client.plan === "Brak planu" ? "Utwórz plan" : "Nowy plan"}</button><button onClick={onOpenPlan} className="h-11 rounded-full border border-black/10 px-5 text-[9px] font-black uppercase">Edytuj plan</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">Rozpocznij trening</button></div></div><div className="mt-6"><ProgressBar value={client.progress}/></div></section> : null}
 
     {tab === "history" ? <section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] p-5"><h2 className="font-black">Historia treningów</h2><p className="text-[10px] text-black/36">Ostatnie zapisane aktywności podopiecznego</p></div>{["Ostatni trening", "Tydzień temu", "Dwa tygodnie temu"].map((date, index) => <div key={date} className="flex min-h-16 items-center gap-3 border-b border-black/[0.055] px-5 py-3 last:border-0"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><CheckCircle2 size={15}/></span><span className="min-w-0 flex-1"><span className="block text-xs font-black">{client.plan}</span><span className="block text-[9px] text-black/36">{date} · {index === 0 ? "Trening zapisany" : "Zrealizowany"}</span></span><ChevronRight size={14}/></div>)}</section> : null}
 
-    {tab === "progress" ? <section className={`${cardClass} p-5 sm:p-7`}><div className="flex items-center justify-between"><div><h2 className="font-black">Postępy podopiecznego</h2><p className="text-[10px] text-black/36">Pomiary i realizacja planu</p></div><button onClick={() => onAction("measurement")} className="h-10 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white">Dodaj pomiar</button></div><div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Realizacja", `${client.progress}%`], ["Masa", client.weight], ["Tkanka tłuszczowa", client.bodyFat], ["Frekwencja", client.attendance]].map(([label, value]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase text-black/30">{label}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}</div><div className="mt-7 flex h-40 items-end gap-2 border-b border-black/10">{[42, 48, 54, 61, 67, 72, 78, Math.max(client.progress, 30)].map((value, index) => <div key={index} className="ui-bar flex-1 rounded-t-lg" style={{ height: `${value}%`, opacity: .3 + index * .08 }}/>)}</div></section> : null}
+    {tab === "progress" ? <section className={`${cardClass} p-5 sm:p-7`}><div className="flex items-center justify-between"><div><h2 className="font-black">Postępy podopiecznego</h2><p className="text-[10px] text-black/36">Pomiary i realizacja planu</p></div><button onClick={() => onAction("measurement")} className="h-10 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white">Dodaj pomiar</button></div><div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Realizacja", `${client.progress}%`], ["Masa", client.weight], ["Tkanka tłuszczowa", client.bodyFat], ["Frekwencja", client.attendance]].map(([label, value]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase text-black/30">{label}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}</div><div className="mt-7"><h3 className="text-[10px] font-black uppercase tracking-wider text-black/32">Historia pomiarów</h3>{measurements.length ? <div className="mt-3 divide-y divide-black/[0.055]">{measurements.slice(0, 8).map((entry) => <div key={entry.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3"><span className="w-24 shrink-0 text-xs font-black tabular-nums">{entry.date}</span><span className="text-xs font-bold">{entry.weight ? `${entry.weight} kg` : "—"}</span><span className="text-xs text-black/45">{entry.bodyFat ? `${entry.bodyFat}% tkanki` : ""}</span>{entry.note ? <span className="w-full text-[10px] leading-4 text-black/38">{entry.note}</span> : null}</div>)}</div> : <p className="mt-3 rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-xs text-black/38">Brak zapisanych pomiarów. Dodaj pierwszy, aby zobaczyć historię.</p>}</div></section> : null}
 
     {tab === "notes" ? <section className={`${cardClass} p-5 sm:p-7`}><h2 className="font-black">Notatki trenera</h2><p className="mt-1 text-[10px] text-black/36">Prywatne informacje dotyczące współpracy i kolejnych kroków.</p><textarea value={note} onChange={(event) => setNote(event.target.value)} className="mt-5 min-h-40 w-full rounded-2xl bg-[#f3f3f1] p-4 text-sm outline-none" placeholder="Dodaj obserwacje, ustalenia lub plan działania…"/><button onClick={() => notify("Notatka podopiecznego została zapisana")} disabled={!note.trim()} className="mt-4 h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white disabled:opacity-35">Zapisz notatkę</button></section> : null}
   </>;
@@ -1353,6 +1338,8 @@ function InvitationCard({ invitation, clientName, onNew, onCopy }: { invitation?
   return <section className={`${cardClass} p-5`}><div className="flex items-start justify-between gap-3"><div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-black/32">Dostęp podopiecznego</p><h3 className="mt-1 font-black">Kod aktywacyjny</h3></div>{invitation ? <Badge tone="good">Aktywny</Badge> : <Badge>Brak kodu</Badge>}</div>{invitation ? <><p className="mt-5 font-mono text-lg font-black tracking-[0.16em]">{invitation.code}</p><p className="mt-1 text-[9px] text-black/32">Ważny do {invitation.expiresAt}</p><div className="mt-4 grid grid-cols-2 gap-2"><button onClick={() => onCopy(invitation.code, "Kod")} className="rounded-full border border-black/10 py-2.5 text-[9px] font-black uppercase tracking-wider">Kopiuj kod</button><button onClick={() => onCopy(link, "Link")} className="rounded-full border border-black/10 py-2.5 text-[9px] font-black uppercase tracking-wider">Kopiuj link</button></div><button onClick={onNew} className="mt-3 w-full text-[9px] font-black uppercase tracking-wider text-black/42 hover:text-black">Wygeneruj nowy kod</button></> : <><p className="mt-4 text-[10px] leading-5 text-black/38">Wygeneruj jednorazowy kod, aby {clientName.split(" ")[0]} mógł utworzyć konto.</p><button onClick={onNew} className="mt-4 w-full rounded-full bg-black py-3 text-[9px] font-black uppercase tracking-wider text-white">Wygeneruj kod</button></>}</section>;
 }
 
+
+type Measurement = { id: string; clientId: string; date: string; weight: string; bodyFat: string; note: string };
 
 type TrainerProfile = { fullName: string; email: string };
 
@@ -1522,8 +1509,9 @@ function ScheduleDialog({ slot, clients, currentClientId, onClose, onSelect }: {
   );
 }
 
-function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onCloseDetail, onSavePlan, onUpdatePlan, notify }: { clients: Client[]; workoutPlans: TrainingProgram[]; initialPlanId: string | null; onOpenDetail: (planId: string) => void; onCloseDetail: () => void; onSavePlan: (plan: TrainingProgram, clientId: string) => void; onUpdatePlan: (plan: TrainingProgram) => void; notify: (text: string) => void }) {
-  const [wizardMode, setWizardMode] = useState<"personal" | "template" | null>(null);
+function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onCloseDetail, onSavePlan, onUpdatePlan, notify, planIntentClientId }: { clients: Client[]; planIntentClientId?: string | null; workoutPlans: TrainingProgram[]; initialPlanId: string | null; onOpenDetail: (planId: string) => void; onCloseDetail: () => void; onSavePlan: (plan: TrainingProgram, clientId: string) => void; onUpdatePlan: (plan: TrainingProgram) => void; notify: (text: string) => void }) {
+  // Wejście z profilu podopiecznego od razu otwiera kreator planu.
+  const [wizardMode, setWizardMode] = useState<"personal" | "template" | null>(planIntentClientId ? "personal" : null);
   const [editingPlan, setEditingPlan] = useState<TrainingProgram | null>(() => initialPlanId ? workoutPlans.find((plan) => plan.id === initialPlanId) ?? null : null);
 
   if (editingPlan) {
@@ -1562,14 +1550,14 @@ function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onClose
       </article>;
     })}</div> : <section className={cardClass}><EmptyState icon={Dumbbell} title="Nie masz jeszcze planów" text="Utwórz pierwszy plan i przypisz go do podopiecznego."/></section>}
 
-    {wizardMode ? <PlanWizard mode={wizardMode} clients={clients} onClose={() => setWizardMode(null)} onSave={(plan, clientId) => { onSavePlan(plan, clientId); setWizardMode(null); }}/> : null}
+    {wizardMode ? <PlanWizard mode={wizardMode} clients={clients} presetClientId={planIntentClientId ?? undefined} onClose={() => setWizardMode(null)} onSave={(plan, clientId) => { onSavePlan(plan, clientId); setWizardMode(null); }}/> : null}
     {editingPlan ? <PlanEditor plan={editingPlan} onClose={() => setEditingPlan(null)} onSave={(plan) => { onUpdatePlan(plan); setEditingPlan(null); }}/> : null}
   </>;
 }
 
-function PlanWizard({ mode,clients,onClose,onSave }: { mode: "personal"|"template"; clients: Client[]; onClose: () => void; onSave: (plan: TrainingProgram,clientId: string) => void; }) {
-  const [step,setStep]=useState(0);
-  const [clientId,setClientId]=useState(clients[0]?.id??"");
+function PlanWizard({ mode,clients,presetClientId,onClose,onSave }: { mode: "personal"|"template"; clients: Client[]; presetClientId?: string; onClose: () => void; onSave: (plan: TrainingProgram,clientId: string) => void; }) {
+  const [step,setStep]=useState(presetClientId ? 1 : 0);
+  const [clientId,setClientId]=useState(presetClientId ?? clients[0]?.id ?? "");
   const [survey,setSurvey]=useState({ goal: mode==="template"? "Sprawność ogólna":"Redukcja tkanki tłuszczowej",level: "Początkujący",days: "3",duration: "60",equipment: "Pełna siłownia",limitations: "",preference: "Trening siłowy",recovery: "Dobra" });
   const [search,setSearch]=useState("");
   const suggested=useMemo(() => suggestExercises(survey.goal,18),[survey.goal]);
@@ -1655,7 +1643,7 @@ function MaterialsView({ notify }: { notify:(text:string)=>void }) {
   return <><PageHeader title="Materiały" subtitle="Udostępniaj podopiecznym pliki, poradniki i filmy." action="Dodaj materiał" secondary={<button onClick={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} className="h-11 rounded-full border border-black/10 bg-white px-4 text-xs font-bold"><Upload size={14} className="mr-2 inline" />Prześlij plik</button>} /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{materials.map((item,i)=><button onClick={()=>notify(`Otworzono: ${item.title}`)} key={item.title} className={`${cardClass} overflow-hidden text-left`}><div className={`grid h-36 place-items-center ${i%3===0?"bg-black text-white":"bg-[#e9e9e7] text-black"}`}>{item.type==="Wideo"?<Activity size={34}/>:item.type==="PDF"?<FileText size={34}/>:<BookOpen size={34}/>}</div><div className="p-5"><div className="flex justify-between gap-3"><Badge tone={i%3===0?"dark":"neutral"}>{item.type}</Badge><span className="text-[9px] text-black/30">{item.size}</span></div><h2 className="mt-4 font-black">{item.title}</h2><p className="mt-1 text-[10px] text-black/36">{item.category} · udostępniono {item.shared} podopiecznym</p></div></button>)}</div></>;
 }
 
-function ReportsView({ clients, appointments, workoutHistory, onExport }: { clients: Client[]; appointments: CalendarAppointment[]; workoutHistory: WorkoutCompletion[]; onExport: (weekLabel?: string) => void }) {
+function ReportsView({ clients, appointments, workoutHistory }: { clients: Client[]; appointments: CalendarAppointment[]; workoutHistory: WorkoutCompletion[] }) {
   const [weekOffset, setWeekOffset] = useState(0);
   if (!clients.length && !appointments.length && !workoutHistory.length) return <><PageHeader title="Raport tygodniowy" subtitle="Regularność, frekwencja i praca z podopiecznymi."/><section className={cardClass}><EmptyState icon={BarChart3} title="Brak danych do raportu" text="Raport będzie dostępny po zapisaniu pierwszych treningów i podopiecznych."/></section></>;
   const weekStart = addDays(startOfWeek(new Date()), weekOffset * 7);
@@ -1670,7 +1658,7 @@ function ReportsView({ clients, appointments, workoutHistory, onExport }: { clie
   const maxSessions = Math.max(...dailySessions, 1);
 
   return <>
-    <PageHeader title="Raport tygodniowy" subtitle="Regularność, frekwencja i praca z podopiecznymi w wybranym tygodniu." secondary={<div className="flex flex-wrap items-center gap-2"><div className="flex h-11 items-center rounded-full border border-black/10 bg-white"><button onClick={() => setWeekOffset((current) => current - 1)} className="grid h-full w-10 place-items-center" aria-label="Poprzedni tydzień"><ChevronLeft size={14}/></button><button onClick={() => setWeekOffset(0)} className="h-full border-x border-black/8 px-4 text-[9px] font-black uppercase">Bieżący tydzień</button><button onClick={() => setWeekOffset((current) => current + 1)} className="grid h-full w-10 place-items-center" aria-label="Następny tydzień"><ChevronRight size={14}/></button></div><button onClick={() => onExport(weekLabel)} className="h-11 rounded-full bg-black px-5 text-xs font-black text-white"><Download size={14} className="mr-2 inline"/>Pobierz PDF</button></div>}/>
+    <PageHeader title="Raport tygodniowy" subtitle="Regularność, frekwencja i praca z podopiecznymi w wybranym tygodniu." secondary={<div className="flex flex-wrap items-center gap-2"><div className="flex h-11 items-center rounded-full border border-black/10 bg-white"><button onClick={() => setWeekOffset((current) => current - 1)} className="grid h-full w-10 place-items-center" aria-label="Poprzedni tydzień"><ChevronLeft size={14}/></button><button onClick={() => setWeekOffset(0)} className="h-full border-x border-black/8 px-4 text-[9px] font-black uppercase">Bieżący tydzień</button><button onClick={() => setWeekOffset((current) => current + 1)} className="grid h-full w-10 place-items-center" aria-label="Następny tydzień"><ChevronRight size={14}/></button></div></div>}/>
     <div className="mb-4 flex items-center justify-between rounded-2xl bg-black px-5 py-4 text-white"><div><p className="text-[8px] font-black uppercase tracking-wider text-white/35">Zakres raportu</p><p className="mt-1 text-sm font-black">{weekLabel}</p></div><Badge>{weekOffset === 0 ? "Aktualny" : weekOffset < 0 ? "Historia" : "Plan"}</Badge></div>
     <div className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]">
       <section className={`${cardClass} p-6`}><div className="flex items-center justify-between"><div><h2 className="font-black">Treningi w kalendarzu</h2><p className="text-[10px] text-black/34">{weekAppointments.length} zaplanowanych spotkań</p></div><Badge tone="good">{weeklyCompleted.length} wykonanych</Badge></div><div className="mt-8 flex h-64 items-end gap-3">{dailySessions.map((value, index) => <div key={index} className="flex flex-1 flex-col items-center gap-2"><div className="relative h-full w-full rounded-t-lg bg-black/[0.05]"><div className="ui-bar absolute inset-x-0 bottom-0 rounded-t-lg bg-black" style={{ height: `${Math.max(5, value / maxSessions * 100)}%`, opacity: .35 + index * .08 }}/></div><span className="text-[8px] text-black/28">{["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"][index]}</span><strong className="text-[9px]">{value}</strong></div>)}</div></section>
@@ -1680,7 +1668,7 @@ function ReportsView({ clients, appointments, workoutHistory, onExport }: { clie
   </>;
 }
 
-function SettingsView({ notify, onExport, onEnablePhoneNotifications, themePreference, onThemeChange, profile, onProfileChange }: { notify: (text: string) => void; onExport: () => void; onEnablePhoneNotifications: () => Promise<boolean>; themePreference: ThemePreference; onThemeChange: (theme: ThemePreference) => void; profile: TrainerProfile; onProfileChange: (profile: TrainerProfile) => void }) {
+function SettingsView({ notify, onEnablePhoneNotifications, themePreference, onThemeChange, profile, onProfileChange }: { notify: (text: string) => void; onEnablePhoneNotifications: () => Promise<boolean>; themePreference: ThemePreference; onThemeChange: (theme: ThemePreference) => void; profile: TrainerProfile; onProfileChange: (profile: TrainerProfile) => void }) {
   const [toggles, setToggles] = useState([true, true, true, true]);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [phoneStatus, setPhoneStatus] = useState<"unknown" | "active" | "unavailable">("unknown");
@@ -1755,7 +1743,7 @@ function SettingsView({ notify, onExport, onEnablePhoneNotifications, themePrefe
       <aside className="space-y-4">
         <section className={`${cardClass} p-5`}><div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/32">Wygląd</p><h2 className="mt-1 font-black">Motyw aplikacji</h2></div>{themePreference === "dark" ? <Moon size={20}/> : themePreference === "light" ? <Sun size={20}/> : <Monitor size={20}/>}</div><p className="mt-2 text-[10px] leading-5 text-black/38">Wybór zapisuje się na tym urządzeniu. Tryb systemowy reaguje automatycznie na ustawienia telefonu lub komputera.</p><div className="mt-4 grid grid-cols-3 gap-2">{([{ id: "dark", label: "Ciemny", icon: Moon }, { id: "light", label: "Jasny", icon: Sun }, { id: "system", label: "System", icon: Monitor }] as const).map((item) => { const Icon = item.icon; const active = themePreference === item.id; return <button key={item.id} onClick={() => { onThemeChange(item.id); notify(`Motyw: ${item.label}`); }} aria-pressed={active} className={`flex min-h-[76px] flex-col items-center justify-center gap-2 rounded-2xl border px-2 text-[9px] font-black uppercase tracking-wider ${active ? "border-black bg-black text-white" : "border-black/[0.08] bg-[#f2f2f0] text-black/48"}`}><Icon size={17}/>{item.label}</button>; })}</div></section>
         <section className={`${cardClass} p-5`}><ShieldCheck size={21}/><h2 className="mt-5 font-black">Bezpieczeństwo</h2><div className="mt-4 space-y-3">{[["Logowanie dwuetapowe", "Gotowe do włączenia"], ["Ostatnie logowanie", "Bieżąca sesja"], ["Aktywne sesje", "1 urządzenie"]].map(([label, value]) => <div key={label} className="flex justify-between gap-3 text-[10px]"><span className="text-black/38">{label}</span><strong>{value}</strong></div>)}</div><button onClick={() => setSecurityOpen(true)} className="mt-5 h-12 w-full rounded-full border border-black/12 text-[10px] font-black uppercase tracking-wider transition hover:bg-black hover:text-white">Zarządzaj ochroną</button></section>
-        <section className={`${cardClass} p-5`}><Download size={21}/><h2 className="mt-5 font-black">Dane i eksport</h2><p className="mt-2 text-[10px] leading-5 text-black/38">Utwórz czytelny PDF z podopiecznymi, planami i historią kalendarza.</p><button onClick={onExport} className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-black px-4 text-[10px] font-black uppercase tracking-wider text-white"><Download size={14}/>Pobierz eksport PDF</button></section>
+        
       </aside>
     </div>
     {securityOpen ? <SecurityDialog onClose={() => setSecurityOpen(false)} notify={notify}/> : null}
@@ -1945,9 +1933,87 @@ function InvitationDialog({ invitation, onClose, onCopy }: { invitation: ClientI
   return <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4 backdrop-blur-sm"><button className="absolute inset-0" onClick={onClose} aria-label="Zamknij"/><section className="relative w-full max-w-md rounded-[28px] bg-white p-7 text-center shadow-2xl"><button onClick={onClose} className="absolute right-5 top-5 grid h-8 w-8 place-items-center rounded-full bg-[#f1f1ef]"><X size={15}/></button><div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-black text-white"><UserPlus size={18}/></div><p className="mt-5 text-[9px] font-black uppercase tracking-[0.14em] text-black/32">Zaproszenie podopiecznego</p><h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">{invitation.clientName}</h2><p className="mt-5 font-mono text-2xl font-black tracking-[0.18em]">{invitation.code}</p><p className="mt-2 text-[10px] text-black/36">Jednorazowy kod · ważny do {invitation.expiresAt}</p><div className="mt-6 grid grid-cols-2 gap-2"><button onClick={()=>onCopy(invitation.code,"Kod")} className="h-11 rounded-full bg-black text-[9px] font-black uppercase tracking-wider text-white">Kopiuj kod</button><button onClick={()=>onCopy(link,"Link")} className="h-11 rounded-full border border-black/10 text-[9px] font-black uppercase tracking-wider">Kopiuj link</button></div><p className="mt-5 text-[9px] leading-4 text-black/30">Po utworzeniu konta kod zostanie oznaczony jako wykorzystany i nie zadziała ponownie.</p></section></div>;
 }
 
-function ActionModal({ type, onClose, onSave }: { type: Exclude<ModalType,null>; onClose:()=>void; onSave:(data:Record<string,string>)=>void }) {
-  const labels: Record<Exclude<ModalType,null>,[string,string]> = { client:["Nowy podopieczny","Dodaj podstawowe dane i od razu wygeneruj kod dostępu."], measurement:["Nowy pomiar","Zapisz aktualne wyniki podopiecznego."] };
-  const [form,setForm]=useState<Record<string,string>>({});
-  const fields = type==="client"?[["name","Imię i nazwisko"],["email","Adres e-mail"],["phone","Telefon"],["goal","Główny cel"]]:[["client","Podopieczny"],["weight","Masa ciała"],["bodyfat","Tkanka tłuszczowa"],["note","Notatka"]];
-  return <div className="fixed inset-0 z-[80] grid place-items-center bg-black/55 p-4 backdrop-blur-sm"><button className="absolute inset-0" onClick={onClose} aria-label="Zamknij"/><form onSubmit={(e)=>{e.preventDefault();onSave(form);}} className="relative w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl sm:p-8"><div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/34">FutureBody Trainer</p><h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">{labels[type][0]}</h2><p className="mt-1 text-xs text-black/38">{labels[type][1]}</p></div><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-[#f0f0ee]"><X size={16}/></button></div><div className="mt-7 grid gap-4 sm:grid-cols-2">{fields.map(([key,label])=><label key={key} className={key==="goal"||key==="note"?"sm:col-span-2":""}><span className="mb-2 block text-[9px] font-black uppercase tracking-wider text-black/32">{label}</span><input required={key==="name"||key==="client"} value={form[key]||""} onChange={(e)=>setForm({...form,[key]:e.target.value})} className="h-12 w-full rounded-xl bg-[#f1f1ef] px-3 text-xs outline-none ring-black focus:ring-1" placeholder={label}/></label>)}</div><div className="mt-7 flex justify-end gap-2"><button type="button" onClick={onClose} className="h-11 rounded-full border border-black/10 px-5 text-[10px] font-black uppercase tracking-wider">Anuluj</button><button type="submit" className="h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase tracking-wider text-white">Zapisz</button></div></form></div>;
+function ActionModal({ type, clients, presetClient, onClose, onSave }: {
+  type: Exclude<ModalType, null>;
+  clients: Client[];
+  presetClient: Client | null;
+  onClose: () => void;
+  onSave: (data: Record<string, string>) => void;
+}) {
+  const labels: Record<Exclude<ModalType, null>, [string, string]> = {
+    client: ["Nowy podopieczny", "Dodaj podstawowe dane i od razu wygeneruj kod dostępu."],
+    measurement: ["Nowy pomiar", presetClient ? `Zapiszemy w profilu: ${presetClient.name}.` : "Wybierz podopiecznego i zapisz wyniki."],
+  };
+  const [form, setForm] = useState<Record<string, string>>({});
+  // W profilu podopiecznego adresat jest znany, więc nie pytamy o niego ponownie.
+  const [clientId, setClientId] = useState(presetClient?.id ?? "");
+
+  const fields: [string, string][] = type === "client"
+    ? [["name", "Imię i nazwisko"], ["email", "Adres e-mail"], ["phone", "Telefon"], ["goal", "Główny cel"]]
+    : [["weight", "Masa ciała (kg)"], ["bodyfat", "Tkanka tłuszczowa (%)"], ["note", "Notatka"]];
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55 backdrop-blur-sm sm:items-center sm:p-4">
+      <button className="absolute inset-0" onClick={onClose} aria-label="Zamknij" />
+      <form
+        onSubmit={(event) => { event.preventDefault(); onSave(type === "measurement" ? { ...form, clientId } : form); }}
+        className="ui-sheet relative flex max-h-[88svh] w-full flex-col rounded-t-[28px] bg-white shadow-2xl sm:max-h-[86svh] sm:max-w-lg sm:rounded-[28px]"
+      >
+        <div className="shrink-0 px-5 pt-4 sm:px-8 sm:pt-7">
+          <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/15 sm:hidden" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/34">FutureBody Trainer</p>
+              <h2 className="mt-1.5 text-2xl font-black tracking-[-0.04em]">{labels[type][0]}</h2>
+              <p className="mt-1 text-xs text-black/38">{labels[type][1]}</p>
+            </div>
+            <button type="button" onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#f0f0ee]" aria-label="Zamknij"><X size={16} /></button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-8">
+          {type === "measurement" && !presetClient ? (
+            <label className="mb-4 block">
+              <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-black/32">Podopieczny</span>
+              <select value={clientId} onChange={(event) => setClientId(event.target.value)} required className="h-12 w-full rounded-xl border-0 bg-[#f2f2f0] px-3 text-sm font-bold outline-none">
+                <option value="">Wybierz osobę…</option>
+                {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+              </select>
+            </label>
+          ) : null}
+          {type === "measurement" && presetClient ? (
+            <div className="mb-4 flex items-center gap-3 rounded-2xl bg-[#f2f2f0] p-3">
+              <Avatar initials={presetClient.initials} dark />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black">{presetClient.name}</p>
+                <p className="truncate text-[10px] text-black/40">{presetClient.goal}</p>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {fields.map(([key, label]) => (
+              <label key={key} className={key === "goal" || key === "note" ? "sm:col-span-2" : ""}>
+                <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-black/32">{label}</span>
+                <input
+                  value={form[key] ?? ""}
+                  onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+                  inputMode={key === "weight" || key === "bodyfat" ? "decimal" : undefined}
+                  required={key === "name"}
+                  className="h-12 w-full rounded-xl bg-[#f2f2f0] px-3.5 text-sm outline-none"
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="shrink-0 border-t border-black/[0.06] px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-8">
+          <button type="submit" className="h-12 w-full rounded-full bg-black text-[11px] font-black uppercase tracking-wider text-white">
+            {type === "client" ? "Dodaj podopiecznego" : "Zapisz pomiar"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
+
