@@ -6,6 +6,6 @@
 4. Włącz wymagane metody logowania w Supabase Auth.
 5. Przetestuj polityki Row Level Security dla każdej roli przed użyciem prawdziwych danych.
 
-Interfejs aplikacji działa bez zewnętrznego projektu w trybie demonstracyjnym. Po podaniu publicznego adresu i klucza anonimowego formularz logowania może korzystać z Supabase Auth.
+Bez skonfigurowanego projektu Supabase aplikacja zatrzymuje się na ekranie logowania i nie udostępnia żadnych danych. Po podaniu publicznego adresu i klucza anonimowego formularz logowania korzysta z Supabase Auth.
 
 Duże pliki nie powinny trafiać do PostgreSQL. Ich metadane przechowuje tabela `file_objects`, a zawartość będzie zapisywana w Cloudflare R2.
