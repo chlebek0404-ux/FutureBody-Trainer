@@ -79,7 +79,7 @@ export default function ExerciseLibraryPanel() {
       {/* Wyszukiwanie i filtry */}
       <div className="sticky top-[calc(72px+env(safe-area-inset-top))] z-20 -mx-4 mb-4 bg-[var(--fb-bg)] px-4 py-3 lg:top-[72px]">
         <div className="flex gap-2">
-          <label className="flex h-12 flex-1 items-center gap-2.5 rounded-2xl border border-black/[0.08] bg-white px-4">
+          <label className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-2xl border border-black/[0.08] bg-white px-4">
             <Search size={16} className="shrink-0 text-black/32" />
             <input
               value={query}
@@ -108,7 +108,7 @@ export default function ExerciseLibraryPanel() {
           </button>
         </div>
 
-        <div className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+        <div className="fb-scroll-x -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
           {["Wszystkie", ...exerciseGroups].map((name) => {
             const count = name === "Wszystkie" ? exerciseLibrary.length : exerciseLibrary.filter((item) => item.muscle === name).length;
             const active = group === name;

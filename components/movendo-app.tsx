@@ -130,22 +130,27 @@ function ProgressBar({ value, dark = false }: { value: number; dark?: boolean })
   );
 }
 
+/**
+ * Nagłówek ekranu. Tytuł i akcja główna zajmują pierwszy rząd, treść dodatkowa
+ * (filtry, przełączniki) własny — dzięki temu nic się nie tłoczy ani nie zawija
+ * w połowie słowa przy wąskich ekranach.
+ */
 function PageHeader({ title, subtitle, action, onAction, secondary }: { title: string; subtitle: string; action?: string; onAction?: () => void; secondary?: ReactNode }) {
   return (
-    <div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-      <div>
-        <h1 className="text-[34px] font-black tracking-[-0.055em] sm:text-[42px]">{title}</h1>
-        <p className="mt-1.5 text-sm text-black/42">{subtitle}</p>
-      </div>
-      <div className="flex items-center gap-2">
-        {secondary}
+    <header className="mb-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[clamp(2rem,6.5vw,2.9rem)] font-black leading-[1.02] tracking-[-0.055em]">{title}</h1>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--fb-text-secondary)]">{subtitle}</p>
+        </div>
         {action ? (
-          <button onClick={onAction} className="flex h-11 items-center gap-2 rounded-full bg-black px-5 text-xs font-black uppercase tracking-[0.08em] text-white transition hover:-translate-y-0.5">
-            <Plus size={16} /> {action}
+          <button onClick={onAction} className="fb-btn fb-btn-primary shrink-0">
+            <Plus size={16} />{action}
           </button>
         ) : null}
       </div>
-    </div>
+      {secondary ? <div className="mt-4">{secondary}</div> : null}
+    </header>
   );
 }
 
@@ -274,13 +279,14 @@ function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPass
 
   return (
     <main className="futurebody-app futurebody-login-enter relative flex min-h-[100svh] items-center justify-center overflow-hidden bg-[#050505] px-4 py-[max(2.5rem,env(safe-area-inset-top))] text-[#f7f7f7] sm:px-6">
-      <div className="pointer-events-none absolute left-1/2 top-[-14rem] h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-[#ffc400]/[0.055] blur-[100px]" />
-      <section className="w-full max-w-[440px]">
-        <div className="mb-9 flex flex-col items-center text-center">
-          <img src="/futurebody-logo.png" alt="FutureBody Trainer" className="h-20 w-20 rounded-[22px] object-cover shadow-[0_18px_55px_rgba(255,196,0,.10)] ring-1 ring-white/10" />
-          <p className="mt-5 text-[13px] font-black tracking-[0.24em]">FUTUREBODY</p>
-          <p className="mt-1 text-[9px] uppercase tracking-[0.42em] text-black/35">Trainer</p>
-          <p className="mt-5 text-[11px] text-white/34">Twój trening. Twoi podopieczni. Twój system.</p>
+      {/* Światło otoczenia buduje głębię pod kartą logowania. */}
+      <div className="pointer-events-none absolute left-1/2 top-[-16rem] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-[var(--fb-gold)] opacity-[0.10] blur-[110px]" aria-hidden="true" />
+      <div className="pointer-events-none absolute bottom-[-12rem] right-[-8rem] h-[26rem] w-[26rem] rounded-full bg-[#7896ff] opacity-[0.07] blur-[110px]" aria-hidden="true" />
+      <section className="relative w-full max-w-[440px]">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <img src="/futurebody-logo.png" alt="FutureBody Trainer" className="h-[72px] w-[72px] rounded-[22px] object-cover shadow-[0_18px_55px_rgba(255,196,0,.16)] ring-1 ring-white/12" />
+          <p className="mt-5 text-[12px] font-black tracking-[0.26em]">FUTUREBODY</p>
+          <h1 className="mt-4 text-[30px] font-black leading-[0.98] tracking-[-0.05em] sm:text-[36px]">Twój trening.<br />Twoi podopieczni.<br /><span className="text-[var(--fb-gold)]">Twój system.</span></h1>
         </div>
 
         <div className="rounded-[24px] border border-white/[0.07] bg-[#111214] p-6 shadow-[0_28px_90px_rgba(0,0,0,.36)] sm:p-8">
@@ -291,7 +297,7 @@ function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPass
           ) : null}
 
           <div>
-            <h1 className="text-[30px] font-black tracking-[-0.05em]">{titles[mode][0]}</h1>
+            <h2 className="text-[26px] font-black tracking-[-0.045em]">{titles[mode][0]}</h2>
             <p className="mt-2 text-sm leading-6 text-white/42">{titles[mode][1]}</p>
           </div>
 
@@ -1132,7 +1138,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
                 const Icon = item.icon;
                 const active = activeView === item.id && !selectedClient && !trainerWorkout;
                 return (
-                  <button key={item.id} onClick={() => navigate(item.id)} className={`flex h-10 w-full items-center gap-3 rounded-[13px] px-3 text-left text-[11px] font-semibold transition ${active ? "bg-[#ffc400] text-[#050505]" : "text-white/48 hover:bg-white/[0.06] hover:text-white"}`}>
+                  <button key={item.id} onClick={() => navigate(item.id)} className={`fb-nav-item !min-h-[42px] !text-[0.72rem] ${active ? "fb-nav-item-active" : ""}`}>
                     <Icon size={15} /><span className="min-w-0 flex-1 truncate">{item.label}</span>{item.count ? <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[8px] font-black ${active ? "bg-[#050505] text-[#ffc400]" : "bg-white/12 text-white"}`}>{item.count}</span> : null}
                   </button>
                 );
@@ -1194,7 +1200,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
 
       {!focusedFlow ? <nav className="fb-dark-surface fixed inset-x-3 bottom-[max(.75rem,env(safe-area-inset-bottom))] z-30 flex items-center justify-around rounded-[22px] border border-white/[0.08] bg-[#0b0b0d]/95 px-2 py-2 text-white shadow-[0_18px_50px_rgba(0,0,0,.45)] backdrop-blur-xl md:hidden">
         {primaryNavigation.map((item) => { const Icon = item.icon; const active = activeView === item.id && !selectedClient && !trainerWorkout; return <button key={item.id} onClick={() => navigate(item.id)} className={`fb-tab ${active ? "fb-tab-active" : ""}`}><Icon size={17} /><span>{item.label}</span></button>; })}
-        <button onClick={() => { setMoreNavigationOpen(true); setMobileMenu(true); }} className={`flex min-h-12 min-w-[52px] flex-col items-center justify-center gap-1 rounded-[16px] px-1.5 py-1.5 text-[8px] font-bold ${secondaryActive ? "bg-[#ffc400] text-[#050505]" : "text-white/42"}`}><MoreHorizontal size={17}/><span>Więcej</span></button>
+        <button onClick={() => { setMoreNavigationOpen(true); setMobileMenu(true); }} className={`fb-tab ${secondaryActive ? "fb-tab-active" : ""}`}><MoreHorizontal size={17}/><span>Więcej</span></button>
       </nav> : null}
 
       {notificationsOpen ? <><button className="fixed inset-0 z-[85] bg-black/50 sm:hidden" onClick={() => setNotificationsOpen(false)} aria-label="Zamknij powiadomienia"/><div className="ui-popover fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[90] max-h-[70svh] overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#111214] shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-13 sm:w-[min(360px,calc(100vw-32px))]"><div className="flex items-center justify-between border-b border-white/[0.07] p-4"><div><p className="text-sm font-black">Powiadomienia</p><p className="text-[9px] text-white/35">{trainerNotifications.filter((item) => !item.read).length} nieprzeczytane</p></div><button onClick={() => setTrainerNotifications((current) => current.map((item) => ({ ...item, read: true })))} className="text-[8px] font-black uppercase tracking-wider text-[#ffc400]">Oznacz wszystkie</button></div><div className="max-h-[46svh] overflow-y-auto p-2 sm:max-h-[360px]">{trainerNotifications.map((item) => <button key={item.id} onClick={() => openTrainerNotification(item)} className={`flex min-h-16 w-full gap-3 rounded-2xl p-3 text-left transition ${item.read ? "opacity-45" : "bg-white/[0.045]"} hover:bg-white/[0.08]`}><span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${item.read ? "bg-white/15" : "bg-[#ffc400]"}`} /><span><span className="block text-xs font-black">{item.title}</span><span className="mt-1 block text-[9px] leading-4 text-white/40">{item.detail}</span></span></button>)}</div><button onClick={enablePhoneNotifications} className="flex w-full items-center justify-center gap-2 border-t border-white/[0.07] px-4 py-3 text-[9px] font-black uppercase tracking-wider"><Bell size={13} />Włącz powiadomienia telefonu</button></div></> : null}
@@ -1772,10 +1778,10 @@ function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onClose
 
     <div className="mb-4 flex items-center justify-between"><div><h2 className="text-lg font-black">Programy podopiecznych</h2><p className="text-[10px] text-black/36">Kliknij plan, aby zobaczyć dni i ćwiczenia.</p></div></div>
 
-    {workoutPlans.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{workoutPlans.map((plan) => {
+    {workoutPlans.length ? <div className="fb-grid-stretch grid gap-4 md:grid-cols-2 xl:grid-cols-3">{workoutPlans.map((plan) => {
       const client = clients.find((candidate) => candidate.id === plan.clientId);
-      return <article key={plan.id} className={`${cardClass} overflow-hidden`}>
-        <button onClick={() => onOpenDetail(plan.id)} className="block w-full p-5 text-left">
+      return <article key={plan.id} className={`${cardClass} fb-rise flex flex-col overflow-hidden`}>
+        <button onClick={() => onOpenDetail(plan.id)} className="block w-full flex-1 p-5 text-left">
           <div className="flex items-start justify-between gap-3"><Badge tone="dark">{plan.category}</Badge><Badge tone="good">Aktywny</Badge></div>
           <h3 className="mt-5 text-xl font-black tracking-[-0.035em]">{plan.name}</h3>
           <p className="mt-1 text-[10px] text-black/38">{plan.days} dni · {plan.duration} · {plan.exercises} ćwiczeń</p>
@@ -2359,7 +2365,7 @@ function ClientPortal({
         <div className="mx-auto flex h-[70px] max-w-6xl items-center px-4 sm:px-7">
           <img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover" />
           <div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">Panel podopiecznego</p></div>
-          <nav className="mx-auto hidden items-center gap-1 md:flex">{tabs.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => { setTab(item.id); setActiveWorkoutDayId(null); }} className={`flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black ${tab === item.id ? "bg-[#ffc400] text-[#050505]" : "text-white/48 hover:text-white"}`}><Icon size={14} />{item.label}</button>; })}</nav>
+          <nav className="mx-auto hidden items-center gap-1 md:flex">{tabs.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => { setTab(item.id); setActiveWorkoutDayId(null); }} className={`flex min-h-11 items-center gap-2 rounded-full px-4 text-[10px] font-black transition ${tab === item.id ? "bg-[color-mix(in_srgb,var(--fb-gold)_14%,transparent)] text-[var(--fb-gold)]" : "text-[var(--fb-text-muted)] hover:text-[var(--fb-text)]"}`}><Icon size={14} />{item.label}</button>; })}</nav>
           <button onClick={onLogout} className="ml-auto grid h-9 w-9 place-items-center rounded-full border border-black/10 bg-white" aria-label="Wyloguj"><LogOut size={15} /></button>
         </div>
       </header>
@@ -2450,7 +2456,7 @@ function ClientPortal({
         )}
       </main>
 
-      {!activeWorkoutDay ? <nav className="fb-dark-surface fixed inset-x-3 bottom-[max(.75rem,env(safe-area-inset-bottom))] z-30 flex justify-around rounded-[22px] border border-white/[0.08] bg-[#0b0b0d]/95 p-2 text-white shadow-2xl backdrop-blur-xl md:hidden">{tabs.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setTab(item.id)} className={`flex min-h-12 min-w-[58px] flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1.5 text-[8px] font-bold ${tab === item.id ? "bg-[#ffc400] text-[#050505]" : "text-white/45"}`}><Icon size={16} />{item.label}</button>; })}</nav> : null}
+      {!activeWorkoutDay ? <nav className="fb-dark-surface fixed inset-x-3 bottom-[max(.75rem,env(safe-area-inset-bottom))] z-30 flex justify-around rounded-[22px] border border-white/[0.08] bg-[#0b0b0d]/95 p-2 text-white shadow-2xl backdrop-blur-xl md:hidden">{tabs.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setTab(item.id)} className={`fb-tab !min-w-[58px] ${tab === item.id ? "fb-tab-active" : ""}`}><Icon size={16} />{item.label}</button>; })}</nav> : null}
     </div>
   );
 }
