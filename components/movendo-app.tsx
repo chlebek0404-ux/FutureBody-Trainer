@@ -278,18 +278,47 @@ function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPass
   };
 
   return (
-    <main className="futurebody-app futurebody-login-enter relative flex min-h-[100svh] items-center justify-center overflow-hidden bg-[#050505] px-4 py-[max(2.5rem,env(safe-area-inset-top))] text-[#f7f7f7] sm:px-6">
-      {/* Światło otoczenia buduje głębię pod kartą logowania. */}
-      <div className="pointer-events-none absolute left-1/2 top-[-16rem] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-[var(--fb-gold)] opacity-[0.10] blur-[110px]" aria-hidden="true" />
-      <div className="pointer-events-none absolute bottom-[-12rem] right-[-8rem] h-[26rem] w-[26rem] rounded-full bg-[#7896ff] opacity-[0.07] blur-[110px]" aria-hidden="true" />
-      <section className="relative w-full max-w-[440px]">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <img src="/futurebody-logo.png" alt="FutureBody Trainer" className="h-[72px] w-[72px] rounded-[22px] object-cover shadow-[0_18px_55px_rgba(255,196,0,.16)] ring-1 ring-white/12" />
-          <p className="mt-5 text-[12px] font-black tracking-[0.26em]">FUTUREBODY</p>
-          <h1 className="mt-4 text-[30px] font-black leading-[0.98] tracking-[-0.05em] sm:text-[36px]">Twój trening.<br />Twoi podopieczni.<br /><span className="text-[var(--fb-gold)]">Twój system.</span></h1>
-        </div>
+    <main className="futurebody-app relative min-h-[100svh] overflow-hidden bg-[#050505] text-[#f7f7f7]">
+      {/* Tło: dryfujące światło i siatka techniczna. Animowany jest tylko transform. */}
+      <div className="fb-orb fb-orb-a left-[-14rem] top-[-16rem] h-[38rem] w-[38rem] bg-[var(--fb-gold)] opacity-[0.13]" aria-hidden="true" />
+      <div className="fb-orb fb-orb-b right-[-12rem] top-[18rem] h-[32rem] w-[32rem] bg-[#6f8cff] opacity-[0.10]" aria-hidden="true" />
+      <div className="fb-grid-overlay" aria-hidden="true" />
 
-        <div className="rounded-[24px] border border-white/[0.07] bg-[#111214] p-6 shadow-[0_28px_90px_rgba(0,0,0,.36)] sm:p-8">
+      <div className="relative mx-auto flex min-h-[100svh] w-full max-w-[1180px] flex-col items-center justify-center gap-10 px-5 py-[max(2.5rem,env(safe-area-inset-top))] lg:flex-row lg:items-center lg:gap-16 lg:px-10">
+
+        {/* Panel marki — na dużym ekranie zajmuje lewą kolumnę. */}
+        <section className="w-full max-w-[440px] text-center lg:max-w-none lg:flex-1 lg:text-left">
+          <div className="flex items-center justify-center gap-3.5 lg:justify-start">
+            <img src="/futurebody-logo.png" alt="" aria-hidden="true" className="h-14 w-14 rounded-[18px] object-cover shadow-[0_18px_55px_rgba(255,196,0,.18)] ring-1 ring-white/12" />
+            <span className="text-left">
+              <span className="block text-[13px] font-black tracking-[0.26em]">FUTUREBODY</span>
+              <span className="block text-[9px] uppercase tracking-[0.4em] text-white/32">Trainer</span>
+            </span>
+          </div>
+
+          <h1 className="mt-8 text-[clamp(2.4rem,9vw,4.2rem)] font-black leading-[0.94] tracking-[-0.055em]">
+            <span className="fb-line">Twój trening.</span>
+            <span className="fb-line">Twoi podopieczni.</span>
+            <span className="fb-line text-[var(--fb-gold)]">Twój system.</span>
+          </h1>
+
+          <p className="mx-auto mt-6 max-w-md text-sm leading-6 text-white/45 lg:mx-0">
+            Plany, dieta, kalendarz i postępy w jednym miejscu. Zaprojektowane pod codzienną pracę trenera personalnego, nie pod prezentację.
+          </p>
+
+          <ul className="mx-auto mt-7 grid max-w-md grid-cols-3 gap-2 text-left lg:mx-0 lg:gap-2.5">
+            {[["100", "ćwiczeń w bazie"], ["10", "partii mięśniowych"], ["2", "ścieżki planu"]].map(([value, label]) => (
+              <li key={label} className="fb-glass px-3 py-3 lg:px-4 lg:py-3.5">
+                <span className="block text-xl font-black leading-none tracking-[-0.05em] text-[var(--fb-gold)] lg:text-2xl">{value}</span>
+                <span className="mt-1.5 block text-[9px] leading-3.5 text-white/42 lg:text-[10px] lg:leading-4">{label}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* Karta logowania. */}
+        <section className="w-full max-w-[440px] lg:w-[420px] lg:shrink-0">
+        <div className="fb-auth-card rounded-[26px] border border-white/[0.08] bg-[#111214] p-6 shadow-[0_34px_100px_rgba(0,0,0,.5)] sm:p-8">
           {mode !== "login" ? (
             <button type="button" onClick={() => changeMode(mode === "client-register" ? "code" : "login")} className="mb-6 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-white/42 hover:text-white">
               <ChevronLeft size={14} /> Wróć
@@ -363,8 +392,9 @@ function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPass
           ) : null}
         </div>
 
-        <div className="mt-6 flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-[0.11em] text-white/24"><ShieldCheck size={13} /> Bezpieczne logowanie</div>
-      </section>
+          <div className="mt-6 flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-[0.11em] text-white/24"><ShieldCheck size={13} /> Bezpieczne logowanie</div>
+        </section>
+      </div>
     </main>
   );
 }

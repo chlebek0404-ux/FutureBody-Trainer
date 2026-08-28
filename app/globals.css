@@ -583,6 +583,75 @@ select:focus-visible {
   background: color-mix(in srgb, var(--fb-gold) 13%, transparent);
 }
 
+/* ═══ Ekran logowania ══════════════════════════════════════════════════
+   Pierwsze wrażenie. Dwie plamy światła dryfują powoli w tle — animowany jest
+   wyłącznie `transform`, więc nie kosztuje przemalowania. */
+
+@keyframes fb-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(6%, 5%, 0) scale(1.12); }
+}
+
+@keyframes fb-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.06); }
+  50% { transform: translate3d(-7%, -4%, 0) scale(1); }
+}
+
+.fb-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(90px);
+  will-change: transform;
+}
+
+.fb-orb-a { animation: fb-drift-a 22s var(--motion-ease-soft) infinite; }
+.fb-orb-b { animation: fb-drift-b 27s var(--motion-ease-soft) infinite; }
+
+/* Delikatna siatka techniczna pod treścią — sportowo-technologiczny akcent. */
+.fb-grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 40%, #000, transparent 78%);
+  mask-image: radial-gradient(70% 60% at 50% 40%, #000, transparent 78%);
+}
+
+/* Wejście kolejnych wierszy hasła. */
+@keyframes fb-line-in {
+  from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+
+.fb-line {
+  display: block;
+  animation: fb-line-in 720ms var(--motion-ease) backwards;
+}
+
+.fb-line:nth-child(1) { animation-delay: 80ms; }
+.fb-line:nth-child(2) { animation-delay: 190ms; }
+.fb-line:nth-child(3) { animation-delay: 300ms; }
+
+.fb-auth-card {
+  animation: fb-line-in 760ms var(--motion-ease) 240ms backwards;
+}
+
+/* Pola formularza reagują na wejście kursorem i na aktywność. */
+.fb-auth-card label > div:focus-within,
+.fb-auth-card label:focus-within > div {
+  border-color: color-mix(in srgb, var(--fb-gold) 55%, transparent) !important;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--fb-gold) 12%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-orb-a, .fb-orb-b { animation: none; }
+  .fb-line, .fb-auth-card { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
+}
+
 .futurebody-app input,
 .futurebody-app textarea,
 .futurebody-app select {
