@@ -16,13 +16,13 @@ export const metadata: Metadata = {
   icons: { icon: "/icon-192.png", apple: "/icon-180.png" },
   openGraph: {
     title: "FutureBody Trainer",
-    description: "Twój trening. Twoi klienci. Twój system.",
+    description: "Twój trening. Twoi podopieczni. Twój system.",
     images: [{ url: "/futurebody-logo.png", width: 1365, height: 1365, alt: "FutureBody Trainer" }],
   },
   twitter: {
     card: "summary",
     title: "FutureBody Trainer",
-    description: "Twój trening. Twoi klienci. Twój system.",
+    description: "Twój trening. Twoi podopieczni. Twój system.",
     images: ["/futurebody-logo.png"],
   },
 };

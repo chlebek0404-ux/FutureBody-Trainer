@@ -90,7 +90,7 @@ type NavigationItem = { id: View; label: string; shortLabel?: string; icon: Luci
 const primaryNavigation: NavigationItem[] = [
   { id: "dashboard", label: "Pulpit", icon: LayoutDashboard },
   { id: "calendar", label: "Kalendarz", icon: CalendarDays },
-  { id: "clients", label: "Klienci", icon: Users },
+  { id: "clients", label: "Podopieczni", icon: Users },
   { id: "plans", label: "Plany", icon: Dumbbell },
 ];
 
@@ -163,6 +163,17 @@ function EmptyState({ icon: Icon, title, text }: { icon: LucideIcon; title: stri
   );
 }
 
+function GoogleMark() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+      <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.2-.4-4.7H24v8.9h11.8c-.5 2.7-2 5.1-4.4 6.6v5.5h7.1c4.2-3.8 6.6-9.5 6.6-16.3z"/>
+      <path fill="#34A853" d="M24 46c6 0 11-2 14.6-5.2l-7.1-5.5c-2 1.3-4.5 2.1-7.5 2.1-5.8 0-10.7-3.9-12.4-9.1H4.3v5.7C7.9 41.1 15.4 46 24 46z"/>
+      <path fill="#FBBC05" d="M11.6 28.3c-.4-1.3-.7-2.7-.7-4.3s.3-3 .7-4.3v-5.7H4.3C2.8 17 2 20.4 2 24s.8 7 2.3 10l7.3-5.7z"/>
+      <path fill="#EA4335" d="M24 10.6c3.3 0 6.2 1.1 8.5 3.3l6.3-6.3C35 4.1 30 2 24 2 15.4 2 7.9 6.9 4.3 14l7.3 5.7c1.7-5.2 6.6-9.1 12.4-9.1z"/>
+    </svg>
+  );
+}
+
 type AuthMode = "login" | "trainer-register" | "forgot" | "code" | "client-register";
 type ActivationInfo = { clientId: string; clientName: string; trainerName: string; code: string };
 
@@ -174,6 +185,7 @@ type LoginScreenProps = {
   onValidateCode: (code: string) => Promise<{ info?: ActivationInfo; error?: string }>;
   onActivateClient: (info: ActivationInfo, email: string, password: string) => Promise<string | null>;
   showPreviewAccounts?: boolean;
+  onGoogleSignIn: () => Promise<string | null>;
 };
 
 function FutureBodySplash() {
@@ -183,7 +195,7 @@ function FutureBodySplash() {
   </main>;
 }
 
-function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPassword, onValidateCode, onActivateClient, showPreviewAccounts = false }: LoginScreenProps) {
+function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPassword, onValidateCode, onActivateClient, showPreviewAccounts = false, onGoogleSignIn }: LoginScreenProps) {
   const normalizedInitialCode = initialCode.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
   const [mode, setMode] = useState<AuthMode>(normalizedInitialCode ? "code" : "login");
   const [email, setEmail] = useState("");
@@ -194,8 +206,19 @@ function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPass
   const [activation, setActivation] = useState<ActivationInfo | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  async function signInWithGoogle() {
+    setGoogleLoading(true);
+    setError(null);
+    setSuccess(null);
+    const message = await onGoogleSignIn();
+    // Przy powodzeniu przeglądarka odchodzi na stronę Google, więc stan gaśnie tylko przy błędzie.
+    if (message) setError(message);
+    setGoogleLoading(false);
+  }
 
   function changeMode(next: AuthMode) {
     setMode(next);
@@ -259,7 +282,7 @@ function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPass
           <img src="/futurebody-logo.png" alt="FutureBody Trainer" className="h-20 w-20 rounded-[22px] object-cover shadow-[0_18px_55px_rgba(255,196,0,.10)] ring-1 ring-white/10" />
           <p className="mt-5 text-[13px] font-black tracking-[0.24em]">FUTUREBODY</p>
           <p className="mt-1 text-[9px] uppercase tracking-[0.42em] text-black/35">Trainer</p>
-          <p className="mt-5 text-[11px] text-white/34">Twój trening. Twoi klienci. Twój system.</p>
+          <p className="mt-5 text-[11px] text-white/34">Twój trening. Twoi podopieczni. Twój system.</p>
         </div>
 
         <div className="rounded-[24px] border border-white/[0.07] bg-[#111214] p-6 shadow-[0_28px_90px_rgba(0,0,0,.36)] sm:p-8">
@@ -280,7 +303,21 @@ function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPass
             </div>
           ) : null}
 
-          <form className="mt-7 space-y-4" onSubmit={submit}>
+          {mode === "login" || mode === "trainer-register" ? (
+            <div className="mt-7">
+              <button type="button" onClick={signInWithGoogle} disabled={googleLoading || loading} className="flex h-12 w-full items-center justify-center gap-3 rounded-[16px] border border-black/12 px-5 text-[11px] font-black uppercase tracking-[0.06em] transition hover:bg-black hover:text-white disabled:opacity-50">
+                <GoogleMark />
+                {googleLoading ? "Przekierowanie…" : mode === "login" ? "Zaloguj się przez Google" : "Załóż konto przez Google"}
+              </button>
+              <div className="mt-5 flex items-center gap-3" aria-hidden="true">
+                <span className="h-px flex-1 bg-black/[0.09]" />
+                <span className="text-[9px] font-black uppercase tracking-[0.14em] text-black/28">albo e-mailem</span>
+                <span className="h-px flex-1 bg-black/[0.09]" />
+              </div>
+            </div>
+          ) : null}
+
+          <form className="mt-6 space-y-4" onSubmit={submit}>
             {mode === "trainer-register" ? <AuthInput label="Imię i nazwisko" value={name} onChange={setName} icon={Users} autoComplete="name" /> : null}
             {mode === "code" ? (
               <label className="block"><span className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-black/38">12-znakowy kod</span><div className="flex h-13 items-center rounded-xl border border-black/10 bg-[#f7f7f5] px-4 focus-within:border-black"><LockKeyhole size={15} className="mr-3 text-black/28" /><input value={code} onChange={(event) => setCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12))} className="h-12 min-w-0 flex-1 bg-transparent font-mono text-base font-black tracking-[0.18em] outline-none placeholder:text-black/20" placeholder="WPROWADŹ KOD" autoComplete="one-time-code" /></div><p className="mt-2 text-[10px] text-black/32">Kod ma dokładnie 12 znaków i można użyć go tylko raz.</p></label>
@@ -459,6 +496,9 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const [inviteDialog, setInviteDialog] = useState<ClientInvitation | null>(null);
   const [clientSession, setClientSession] = useState<Client | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
+  const [handoff, setHandoff] = useState(false);
+  const handoffTimer = useRef<number | null>(null);
+  const [calendarIntent, setCalendarIntent] = useState(false);
   const [appointments, setAppointments] = useState<CalendarAppointment[]>(() => readStoredJson("movendo_calendar_history", []));
   const [workoutPlans, setWorkoutPlans] = useState<TrainingProgram[]>(readStoredPlans);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutCompletion[]>(() => readStoredJson("futurebody_workout_history", []));
@@ -519,10 +559,21 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     return () => window.removeEventListener("popstate", syncRouteFromHash);
   }, []);
 
+  // Krótka zasłona przykrywa zamianę ekranu logowania na panel,
+  // żeby wejście do aplikacji nie było cięciem.
+  const startHandoff = useCallback(() => {
+    setHandoff(true);
+    if (handoffTimer.current) window.clearTimeout(handoffTimer.current);
+    handoffTimer.current = window.setTimeout(() => setHandoff(false), 560);
+  }, []);
+
+  useEffect(() => () => { if (handoffTimer.current) window.clearTimeout(handoffTimer.current); }, []);
+
   const applySession = useCallback((session: AccountSession | null) => {
     setRole(session?.role ?? null);
     setClientSession(session?.clientRecord ?? null);
-  }, []);
+    if (session) startHandoff();
+  }, [startHandoff]);
 
   // Splash trwa tyle co dotychczas, ale ekran startowy czeka też na odtworzenie sesji,
   // żeby zalogowany użytkownik nie zobaczył formularza logowania na ułamek sekundy.
@@ -559,16 +610,31 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_OUT") return;
-      setRole(null);
-      setClientSession(null);
-      setSelectedClient(null);
-      setTrainerWorkout(null);
-      setActiveView("dashboard");
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        setRole(null);
+        setClientSession(null);
+        setSelectedClient(null);
+        setTrainerWorkout(null);
+        setActiveView("dashboard");
+        return;
+      }
+      // Powrót z Google kończy się zdarzeniem SIGNED_IN. Zapytania do bazy muszą
+      // wyjść poza ten callback, inaczej klient Supabase się zakleszcza.
+      if (event !== "SIGNED_IN" || !session?.user) return;
+      const user = session.user;
+      window.setTimeout(async () => {
+        const resolved = await loadAccountSession(supabase, user.id, user.email ?? "");
+        if (!resolved) return;
+        if (resolved.role === "client" && !resolved.clientRecord) {
+          await supabase.auth.signOut();
+          return;
+        }
+        applySession(resolved);
+      }, 0);
     });
     return () => data.subscription.unsubscribe();
-  }, []);
+  }, [applySession]);
 
   useEffect(() => {
     if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -624,12 +690,28 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
       { id: "preview-note-2", title: "Plan do przygotowania", detail: "Julia Wrona czeka na pierwszy plan treningowy.", view: "plans", read: false },
     ]);
     setPreviewMode(true);
+    startHandoff();
     if (previewRole === "client") {
       setClientSession(workspace.clients.find((client) => client.id === previewClientId) ?? null);
       setRole("client");
       return null;
     }
     setRole("trainer");
+    return null;
+  }
+
+  async function signInWithGoogle() {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return "Logowanie przez Google będzie dostępne po podłączeniu bazy danych.";
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        // Powrót na ten sam adres zachowuje kontekst aktywacji konta podopiecznego.
+        redirectTo: `${window.location.origin}${window.location.pathname}`,
+        queryParams: { prompt: "select_account" },
+      },
+    });
+    if (error) return "Nie udało się otworzyć logowania Google. Spróbuj ponownie.";
     return null;
   }
 
@@ -766,7 +848,14 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.history[replace ? "replaceState" : "pushState"]({}, "", target);
   }
 
+  // „Dodaj trening” prowadzi wprost do wyboru terminu, a nie tylko do kalendarza.
+  function openScheduling() {
+    setCalendarIntent(true);
+    navigate("calendar");
+  }
+
   function navigate(view: View) {
+    if (view !== "calendar") setCalendarIntent(false);
     setActiveView(view);
     setSelectedClient(null);
     setTrainerWorkout(null);
@@ -789,7 +878,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     const plan = workoutPlans.find((item) => item.clientId === clientId);
     const day = plan?.trainingDays[0];
     if (!plan || !day) {
-      notify("Ten klient nie ma jeszcze gotowego treningu");
+      notify("Ten podopieczny nie ma jeszcze gotowego treningu");
       navigate("plans");
       return;
     }
@@ -803,7 +892,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   function openPlanForClient(clientId: string) {
     const plan = workoutPlans.find((item) => item.clientId === clientId);
     if (!plan) {
-      notify("Ten klient nie ma jeszcze przypisanego planu");
+      notify("Ten podopieczny nie ma jeszcze przypisanego planu");
       navigate("plans");
       return;
     }
@@ -966,12 +1055,13 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const focusedFlow = Boolean(trainerWorkout || selectedPlanId);
 
   if (booting) return <FutureBodySplash/>;
-  if (!role) return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
+  if (!role) return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} onGoogleSignIn={signInWithGoogle} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
   if (role === "client" && clientSession) return <ClientPortal client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} previewMode={previewMode} />;
-  if (role === "client") return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
+  if (role === "client") return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} onGoogleSignIn={signInWithGoogle} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
 
   return (
-    <div className="futurebody-app min-h-[100svh] bg-[#050505] text-[#f7f7f7]">
+    <div className="futurebody-app futurebody-app-enter min-h-[100svh] bg-[#050505] text-[#f7f7f7]">
+      {handoff ? <div className="futurebody-handoff"><img src="/futurebody-mark-transparent-v1.png" alt="" /></div> : null}
       {mobileMenu ? <button className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm lg:hidden" onClick={() => setMobileMenu(false)} aria-label="Zamknij menu" /> : null}
       <aside className={`fb-dark-surface fixed inset-y-0 left-0 z-50 w-[268px] flex-col border-r border-white/[0.07] bg-[#0b0b0d] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] text-white transition-transform duration-300 ${focusedFlow ? "hidden" : "flex lg:translate-x-0"} ${mobileMenu ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex items-center gap-3 px-2 pb-6">
@@ -1021,14 +1111,14 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
         <header className={`fb-dark-surface sticky top-0 z-30 h-[calc(72px+env(safe-area-inset-top))] items-end border-b border-white/[0.07] bg-[#050505]/90 px-4 pb-4 pt-[env(safe-area-inset-top)] text-white backdrop-blur-xl sm:px-7 lg:h-[72px] lg:items-center lg:pb-0 lg:pt-0 lg:px-9 ${focusedFlow ? "hidden" : "flex"}`}>
           <button className="mr-3 grid h-11 w-11 place-items-center rounded-[14px] bg-[#ffc400] text-[#050505] lg:hidden" onClick={() => setMobileMenu(true)} aria-label="Otwórz menu"><Menu size={18} /></button>
           <div className="relative hidden w-full max-w-[430px] sm:block">
-            <div className="flex items-center gap-2.5 rounded-[16px] border border-white/[0.07] bg-[#111214] px-4 py-2.5"><Search size={16} className="text-white/30" /><input ref={searchInputRef} value={query} onFocus={() => setSearchFocused(true)} onChange={(event) => { setQuery(event.target.value); setSearchFocused(true); }} placeholder="Szukaj klienta, planu, zadania…" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/28" /><span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/30">Ctrl K</span></div>
+            <div className="flex items-center gap-2.5 rounded-[16px] border border-white/[0.07] bg-[#111214] px-4 py-2.5"><Search size={16} className="text-white/30" /><input ref={searchInputRef} value={query} onFocus={() => setSearchFocused(true)} onChange={(event) => { setQuery(event.target.value); setSearchFocused(true); }} placeholder="Szukaj podopiecznego, planu, zadania…" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/28" /><span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/30">Ctrl K</span></div>
             {searchFocused && query.trim() ? <div className="ui-popover absolute left-0 right-0 top-[52px] z-50 overflow-hidden rounded-[22px] border border-black/10 bg-white p-2 shadow-2xl"><p className="px-3 py-2 text-[8px] font-black uppercase tracking-wider text-black/30">Wyniki wyszukiwania</p>{searchResults.length ? searchResults.map((result) => { const Icon = result.icon; return <button key={result.id} onMouseDown={(event) => event.preventDefault()} onClick={() => openSearchResult(result)} className="flex w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-[#f3f3f1]"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><Icon size={14} /></span><span className="min-w-0"><span className="block truncate text-xs font-black">{result.title}</span><span className="block truncate text-[9px] text-black/38">{result.detail}</span></span></button>; }) : <div className="px-3 py-6 text-center text-xs text-black/38">Brak wyników. Spróbuj innego hasła.</div>}</div> : null}
           </div>
           <div className="ml-auto flex items-center gap-2"><span className="hidden text-right sm:block"><span className="block text-[11px] font-bold">{new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long" }).format(new Date())}</span><span className="block text-[9px] text-white/34">Warszawa</span></span><div className="relative"><button onClick={() => { setNotificationsOpen((current) => !current); setSearchFocused(false); }} className="relative grid h-11 w-11 place-items-center rounded-[14px] border border-white/[0.07] bg-[#111214]" aria-label="Powiadomienia"><Bell size={17} />{trainerNotifications.some((item) => !item.read) ? <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#ffc400] ring-2 ring-[#111214]" /> : null}</button>{notificationsOpen ? <div className="ui-popover absolute right-0 top-13 z-50 w-[min(360px,calc(100vw-32px))] overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#111214] shadow-2xl"><div className="flex items-center justify-between border-b border-white/[0.07] p-4"><div><p className="text-sm font-black">Powiadomienia</p><p className="text-[9px] text-white/35">{trainerNotifications.filter((item) => !item.read).length} nieprzeczytane</p></div><button onClick={() => setTrainerNotifications((current) => current.map((item) => ({ ...item, read: true })))} className="text-[8px] font-black uppercase tracking-wider text-[#ffc400]">Oznacz wszystkie</button></div><div className="max-h-[360px] overflow-auto p-2">{trainerNotifications.map((item) => <button key={item.id} onClick={() => openTrainerNotification(item)} className={`flex w-full gap-3 rounded-2xl p-3 text-left ${item.read ? "opacity-45" : "bg-white/[0.045]"}`}><span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${item.read ? "bg-white/15" : "bg-[#ffc400]"}`} /><span><span className="block text-xs font-black">{item.title}</span><span className="mt-1 block text-[9px] leading-4 text-white/40">{item.detail}</span></span></button>)}</div><button onClick={enablePhoneNotifications} className="flex w-full items-center justify-center gap-2 border-t border-white/[0.07] px-4 py-3 text-[9px] font-black uppercase tracking-wider"><Bell size={13} />Włącz powiadomienia telefonu</button></div> : null}</div><button onClick={() => navigate("settings")}><Avatar initials="ŁK" size="sm" dark /></button></div>
         </header>
 
         {!focusedFlow ? <button onClick={() => setSearchFocused(true)} className="fixed right-[7.5rem] top-[max(.85rem,env(safe-area-inset-top))] z-40 grid h-11 w-11 place-items-center rounded-[14px] border border-white/[0.07] bg-[#111214] text-white sm:hidden" aria-label="Otwórz wyszukiwanie"><Search size={17}/></button> : null}
-        {searchFocused ? <div className="fixed inset-0 z-[75] bg-black/60 p-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-sm sm:hidden"><button className="absolute inset-0" onClick={() => setSearchFocused(false)} aria-label="Zamknij wyszukiwanie"/><section role="dialog" aria-modal="true" aria-label="Wyszukiwanie" className="relative rounded-[24px] bg-white p-3 shadow-2xl"><div className="flex h-12 items-center gap-3 rounded-2xl bg-[#f3f3f1] px-4"><Search size={16} className="text-black/30"/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="Klient, plan, zadanie…"/><button onClick={() => { setQuery(""); setSearchFocused(false); }} className="grid h-9 w-9 place-items-center rounded-full bg-white" aria-label="Zamknij"><X size={15}/></button></div><div className="mt-2 max-h-[65svh] overflow-auto">{query.trim() ? searchResults.length ? searchResults.map((result) => { const Icon = result.icon; return <button key={result.id} onClick={() => openSearchResult(result)} className="flex min-h-14 w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-[#f3f3f1]"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><Icon size={14}/></span><span className="min-w-0"><span className="block truncate text-xs font-black">{result.title}</span><span className="block truncate text-[9px] text-black/38">{result.detail}</span></span></button>; }) : <p className="px-3 py-8 text-center text-xs text-black/38">Brak wyników</p> : <p className="px-3 py-8 text-center text-xs text-black/38">Zacznij wpisywać imię klienta, nazwę planu lub zadania.</p>}</div></section></div> : null}
+        {searchFocused ? <div className="fixed inset-0 z-[75] bg-black/60 p-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-sm sm:hidden"><button className="absolute inset-0" onClick={() => setSearchFocused(false)} aria-label="Zamknij wyszukiwanie"/><section role="dialog" aria-modal="true" aria-label="Wyszukiwanie" className="relative rounded-[24px] bg-white p-3 shadow-2xl"><div className="flex h-12 items-center gap-3 rounded-2xl bg-[#f3f3f1] px-4"><Search size={16} className="text-black/30"/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="Podopieczny, plan, zadanie…"/><button onClick={() => { setQuery(""); setSearchFocused(false); }} className="grid h-9 w-9 place-items-center rounded-full bg-white" aria-label="Zamknij"><X size={15}/></button></div><div className="mt-2 max-h-[65svh] overflow-auto">{query.trim() ? searchResults.length ? searchResults.map((result) => { const Icon = result.icon; return <button key={result.id} onClick={() => openSearchResult(result)} className="flex min-h-14 w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-[#f3f3f1]"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><Icon size={14}/></span><span className="min-w-0"><span className="block truncate text-xs font-black">{result.title}</span><span className="block truncate text-[9px] text-black/38">{result.detail}</span></span></button>; }) : <p className="px-3 py-8 text-center text-xs text-black/38">Brak wyników</p> : <p className="px-3 py-8 text-center text-xs text-black/38">Zacznij wpisywać imię podopiecznego, nazwę planu lub zadania.</p>}</div></section></div> : null}
 
         <main className={`mx-auto max-w-[1540px] px-[max(1rem,env(safe-area-inset-left))] pt-7 sm:px-7 lg:px-9 lg:pt-9 ${focusedFlow ? "pb-[max(2rem,env(safe-area-inset-bottom))]" : "pb-[calc(10rem+env(safe-area-inset-bottom))] md:pb-12"}`}>
           <div key={trainerWorkout?.dayId ?? currentClient?.id ?? selectedPlanId ?? activeView} className="ui-view">
@@ -1055,7 +1145,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
               notify={notify}
             />
           ) : (
-            <ViewRenderer view={activeView} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={setModal} notify={notify} selectedConversation={selectedConversation} setSelectedConversation={setSelectedConversation} chatMessages={chatMessages} setChatMessages={setChatMessages} message={message} setMessage={setMessage} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onExportWeekly={exportWeeklyReport} onExportAll={exportAllData} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} />
+            <ViewRenderer view={activeView} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} onAddWorkout={openScheduling} calendarIntent={calendarIntent} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={setModal} notify={notify} selectedConversation={selectedConversation} setSelectedConversation={setSelectedConversation} chatMessages={chatMessages} setChatMessages={setChatMessages} message={message} setMessage={setMessage} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onExportWeekly={exportWeeklyReport} onExportAll={exportAllData} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} />
           )}
           </div>
         </main>
@@ -1086,7 +1176,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
 function ViewRenderer(props: {
   view: View; clients: Client[]; setClients: React.Dispatch<React.SetStateAction<Client[]>>; query: string; onClient: (id: string) => void;
   onStartWorkout: (clientId: string) => void; onOpenPlan: (planId: string) => void; onNavigate: (view: View) => void;
-  selectedPlanId: string | null;
+  selectedPlanId: string | null; onAddWorkout: () => void; calendarIntent: boolean;
   tasks: typeof initialTasks; setTasks: React.Dispatch<React.SetStateAction<typeof initialTasks>>; onModal: (type: ModalType) => void; notify: (text: string) => void;
   selectedConversation: string; setSelectedConversation: (id: string) => void; chatMessages: string[]; setChatMessages: React.Dispatch<React.SetStateAction<string[]>>; message: string; setMessage: (value: string) => void;
   appointments: CalendarAppointment[]; onSchedule: (input: { id?: string; date: string; hour: number; clientId: string }) => void;
@@ -1096,9 +1186,9 @@ function ViewRenderer(props: {
   themePreference: ThemePreference; onThemeChange: (theme: ThemePreference) => void;
 }) {
   switch (props.view) {
-    case "dashboard": return <Dashboard clients={props.clients} appointments={props.appointments} tasks={props.tasks} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} />;
+    case "dashboard": return <Dashboard clients={props.clients} appointments={props.appointments} tasks={props.tasks} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
     case "clients": return <ClientsView clients={props.clients} query={props.query} onClient={props.onClient} onAdd={() => props.onModal("client")} />;
-    case "calendar": return <CalendarView clients={props.clients} appointments={props.appointments} onSchedule={props.onSchedule} onOpenClient={props.onClient} onStartWorkout={props.onStartWorkout} onCancel={props.onCancelAppointment} onDelete={props.onDeleteAppointment} />;
+    case "calendar": return <CalendarView clients={props.clients} appointments={props.appointments} onSchedule={props.onSchedule} onOpenClient={props.onClient} onStartWorkout={props.onStartWorkout} onCancel={props.onCancelAppointment} onDelete={props.onDeleteAppointment} autoSchedule={props.calendarIntent} />;
     case "plans": return <PlansView clients={props.clients} workoutPlans={props.workoutPlans} initialPlanId={props.selectedPlanId} onOpenDetail={props.onOpenPlan} onCloseDetail={() => props.onNavigate("plans")} onSavePlan={props.onSavePlan} onUpdatePlan={props.onUpdatePlan} notify={props.notify} />;
     case "exercises": return <ExercisesView />;
     case "progress": return <ProgressView clients={props.clients} workoutHistory={props.workoutHistory} onMeasurement={() => props.onModal("measurement")} />;
@@ -1112,7 +1202,7 @@ function ViewRenderer(props: {
   }
 }
 
-function Dashboard({ clients, appointments, tasks, onModal, onClient, onStartWorkout, onNavigate }: { clients: Client[]; appointments: CalendarAppointment[]; tasks: typeof initialTasks; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void }) {
+function Dashboard({ clients, appointments, tasks, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { clients: Client[]; appointments: CalendarAppointment[]; tasks: typeof initialTasks; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
   const today = appointments.filter((item) => item.date === dateKey(new Date())).sort((a, b) => a.hour - b.hour);
   const nextAppointment = today.find((item) => item.hour >= new Date().getHours()) ?? today[0];
   const nextClient = nextAppointment ? clients.find((client) => client.id === nextAppointment.clientId) ?? null : null;
@@ -1120,10 +1210,10 @@ function Dashboard({ clients, appointments, tasks, onModal, onClient, onStartWor
   const clientsWithoutPlan = clients.filter((client) => client.plan === "Brak planu");
   return (
     <>
-      <PageHeader title="Dzień dobry." subtitle={`Dzisiaj: ${today.length} ${today.length === 1 ? "trening" : today.length >= 2 && today.length <= 4 ? "treningi" : "treningów"}. Najważniejsze działania masz poniżej.`} action="Dodaj klienta" onAction={() => onModal("client")} />
+      <PageHeader title="Dzień dobry." subtitle={`Dzisiaj: ${today.length} ${today.length === 1 ? "trening" : today.length >= 2 && today.length <= 4 ? "treningi" : "treningów"}. Najważniejsze działania masz poniżej.`} action="Dodaj podopiecznego" onAction={() => onModal("client")} />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Szybkie akcje">
-        <button onClick={() => onNavigate("calendar")} className={`${cardClass} flex min-h-20 items-center gap-4 p-4 text-left transition hover:-translate-y-0.5`}><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white"><CalendarPlus size={18}/></span><span><span className="block text-xs font-black">Dodaj trening</span><span className="mt-1 block text-[10px] text-black/38">Wybierz godzinę w kalendarzu</span></span></button>
+        <button onClick={onAddWorkout} className={`${cardClass} flex min-h-20 items-center gap-4 p-4 text-left transition hover:-translate-y-0.5`}><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white"><CalendarPlus size={18}/></span><span><span className="block text-xs font-black">Dodaj trening</span><span className="mt-1 block text-[10px] text-black/38">Od razu wybierz podopiecznego i godzinę</span></span></button>
         <button onClick={() => onModal("client")} className={`${cardClass} flex min-h-20 items-center gap-4 p-4 text-left transition hover:-translate-y-0.5`}><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white"><UserPlus size={18}/></span><span><span className="block text-xs font-black">Dodaj klienta</span><span className="mt-1 block text-[10px] text-black/38">Utwórz profil i kod dostępu</span></span></button>
         <button onClick={() => onNavigate("plans")} className={`${cardClass} flex min-h-20 items-center gap-4 p-4 text-left transition hover:-translate-y-0.5`}><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white"><Dumbbell size={18}/></span><span><span className="block text-xs font-black">Utwórz plan</span><span className="mt-1 block text-[10px] text-black/38">Przejdź do planów treningowych</span></span></button>
         <button onClick={() => onNavigate("calendar")} className={`${cardClass} flex min-h-20 items-center gap-4 p-4 text-left transition hover:-translate-y-0.5`}><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white"><CalendarDays size={18}/></span><span><span className="block text-xs font-black">Otwórz kalendarz</span><span className="mt-1 block text-[10px] text-black/38">Dzień, tydzień i historia</span></span></button>
@@ -1134,7 +1224,7 @@ function Dashboard({ clients, appointments, tasks, onModal, onClient, onStartWor
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_.85fr]">
         <section className={cardClass}>
           <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4 sm:px-6"><div><h2 className="font-black">Dzisiaj</h2><p className="text-[11px] text-black/36">Treningi pochodzą z kalendarza</p></div><button onClick={() => onNavigate("calendar")} className="text-[9px] font-black uppercase tracking-wider">Pełny kalendarz</button></div>
-          {today.length ? <div className="divide-y divide-black/[0.055]">{today.map((item) => { const client = clients.find((person) => person.id === item.clientId); if (!client) return null; const isNext = item.id === nextAppointment?.id; return <div key={item.id} className="grid grid-cols-[54px_1fr] items-center gap-3 px-5 py-4 sm:grid-cols-[62px_40px_1fr_auto] sm:px-6"><div><p className="text-sm font-black">{String(item.hour).padStart(2, "0")}:00</p><p className="text-[9px] text-black/32">60 min</p></div><div className="hidden sm:block"><Avatar initials={client.initials}/></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><button onClick={() => onClient(client.id)} className="truncate text-left text-sm font-black hover:underline">{client.name}</button>{isNext ? <Badge tone="dark">Następny</Badge> : <Badge>{item.status ?? "Zaplanowany"}</Badge>}</div><p className="truncate text-[10px] text-black/38">{client.plan}</p></div><button onClick={() => onStartWorkout(client.id)} className="col-span-2 mt-1 h-11 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white sm:col-span-1 sm:mt-0">Start</button></div>; })}</div> : <div className="p-7 text-center"><CalendarDays size={22} className="mx-auto text-black/25"/><p className="mt-3 text-sm font-black">Nie masz dziś zaplanowanych treningów</p><button onClick={() => onNavigate("calendar")} className="mt-4 h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">Dodaj trening</button></div>}
+          {today.length ? <div className="divide-y divide-black/[0.055]">{today.map((item) => { const client = clients.find((person) => person.id === item.clientId); if (!client) return null; const isNext = item.id === nextAppointment?.id; return <div key={item.id} className="grid grid-cols-[54px_1fr] items-center gap-3 px-5 py-4 sm:grid-cols-[62px_40px_1fr_auto] sm:px-6"><div><p className="text-sm font-black">{String(item.hour).padStart(2, "0")}:00</p><p className="text-[9px] text-black/32">60 min</p></div><div className="hidden sm:block"><Avatar initials={client.initials}/></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><button onClick={() => onClient(client.id)} className="truncate text-left text-sm font-black hover:underline">{client.name}</button>{isNext ? <Badge tone="dark">Następny</Badge> : <Badge>{item.status ?? "Zaplanowany"}</Badge>}</div><p className="truncate text-[10px] text-black/38">{client.plan}</p></div><button onClick={() => onStartWorkout(client.id)} className="col-span-2 mt-1 h-11 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white sm:col-span-1 sm:mt-0">Start</button></div>; })}</div> : <div className="p-7 text-center"><CalendarDays size={22} className="mx-auto text-black/25"/><p className="mt-3 text-sm font-black">Nie masz dziś zaplanowanych treningów</p><button onClick={onAddWorkout} className="mt-4 h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">Dodaj trening</button></div>}
         </section>
         <section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] px-5 py-4"><h2 className="font-black">Do zrobienia</h2><p className="text-[11px] text-black/36">Sprawy wymagające uwagi</p></div><div className="divide-y divide-black/[0.055]">{clientsWithoutPlan.slice(0, 2).map((client) => <button key={client.id} onClick={() => onClient(client.id)} className="flex min-h-16 w-full items-center gap-3 px-5 py-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-full bg-amber-50 text-amber-800"><Dumbbell size={15}/></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client.name} nie ma planu</span><span className="mt-1 block text-[9px] text-black/36">Otwórz profil i przypisz program</span></span><ChevronRight size={14}/></button>)}{openTasks.map((task) => <button key={task.id} onClick={() => onNavigate("tasks")} className="flex min-h-16 w-full items-center gap-3 px-5 py-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><CheckCircle2 size={15}/></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{task.title}</span><span className="mt-1 block text-[9px] text-black/36">{task.due} · {task.category}</span></span><Badge tone={task.priority === "Wysoki" ? "bad" : task.priority === "Średni" ? "warn" : "neutral"}>{task.priority}</Badge></button>)}</div></section>
       </div>
@@ -1161,20 +1251,20 @@ function ClientProfile({ client, invitation, onBack, onAction, onOpenCalendar, o
   ] as const;
 
   return <>
-    <button onClick={onBack} className="mb-5 flex min-h-11 items-center gap-2 text-xs font-black text-black/44 hover:text-black"><ChevronLeft size={15}/>Wróć do klientów</button>
-    <header className="mb-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div className="flex min-w-0 items-center gap-4"><Avatar initials={client.initials} size="lg" dark/><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h1 className="truncate text-3xl font-black tracking-[-0.05em] sm:text-4xl">{client.name}</h1><Badge tone="good">{client.status}</Badge></div><p className="mt-1 truncate text-sm text-black/40">{client.goal} · {client.email}</p></div></div><div className="flex flex-wrap gap-2"><button onClick={() => notify("Rozmowa z klientem została otwarta")} className="h-11 rounded-full border border-black/10 bg-white px-4 text-[10px] font-black uppercase"><MessageCircle size={14} className="mr-2 inline"/>Wiadomość</button><button onClick={onOpenCalendar} className="h-11 rounded-full border border-black/10 bg-white px-4 text-[10px] font-black uppercase"><CalendarPlus size={14} className="mr-2 inline"/>Umów</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-black px-5 text-[10px] font-black uppercase text-white"><Dumbbell size={14} className="mr-2 inline"/>Rozpocznij trening</button></div></header>
+    <button onClick={onBack} className="mb-5 flex min-h-11 items-center gap-2 text-xs font-black text-black/44 hover:text-black"><ChevronLeft size={15}/>Wróć do podopiecznych</button>
+    <header className="mb-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div className="flex min-w-0 items-center gap-4"><Avatar initials={client.initials} size="lg" dark/><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h1 className="truncate text-3xl font-black tracking-[-0.05em] sm:text-4xl">{client.name}</h1><Badge tone="good">{client.status}</Badge></div><p className="mt-1 truncate text-sm text-black/40">{client.goal} · {client.email}</p></div></div><div className="flex flex-wrap gap-2"><button onClick={() => notify("Rozmowa z podopiecznym została otwarta")} className="h-11 rounded-full border border-black/10 bg-white px-4 text-[10px] font-black uppercase"><MessageCircle size={14} className="mr-2 inline"/>Wiadomość</button><button onClick={onOpenCalendar} className="h-11 rounded-full border border-black/10 bg-white px-4 text-[10px] font-black uppercase"><CalendarPlus size={14} className="mr-2 inline"/>Umów</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-black px-5 text-[10px] font-black uppercase text-white"><Dumbbell size={14} className="mr-2 inline"/>Rozpocznij trening</button></div></header>
 
-    <nav className="mb-5 flex gap-1 overflow-x-auto rounded-2xl bg-[#eeeeec] p-1 [scrollbar-width:none]" aria-label="Sekcje profilu klienta">{profileTabs.map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-[9px] font-black uppercase tracking-wider ${tab === id ? "fb-selected" : "text-black/42"}`}>{label}</button>)}</nav>
+    <nav className="mb-5 flex gap-1 overflow-x-auto rounded-2xl bg-[#eeeeec] p-1 [scrollbar-width:none]" aria-label="Sekcje profilu podopiecznego">{profileTabs.map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-[9px] font-black uppercase tracking-wider ${tab === id ? "fb-selected" : "text-black/42"}`}>{label}</button>)}</nav>
 
     {tab === "overview" ? <div className="grid gap-4 xl:grid-cols-[1.25fr_.75fr]"><div className="space-y-4"><section className="fb-dark-surface rounded-[26px] bg-[#0b0b0d] p-6 text-white sm:p-7"><div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/35">Aktywny plan</p><h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">{client.plan}</h2><p className="mt-2 text-xs text-white/42">Cel: {client.goal}</p></div><div className="flex gap-2"><button onClick={onOpenPlan} className="h-11 rounded-full border border-white/15 px-5 text-[9px] font-black uppercase">Otwórz plan</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-[#ffc400] px-5 text-[9px] font-black uppercase text-[#050505]">Start</button></div></div><div className="mt-6"><div className="mb-2 flex justify-between text-[9px]"><span className="text-white/38">Realizacja programu</span><strong>{client.progress}%</strong></div><div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#ffc400]" style={{ width: `${client.progress}%` }}/></div></div></section><section className={`${cardClass} p-5 sm:p-6`}><div className="flex items-center justify-between"><div><h2 className="font-black">Najważniejsze dane</h2><p className="text-[10px] text-black/36">Jedno źródło informacji o współpracy</p></div><button onClick={() => onAction("measurement")} className="h-10 rounded-full border border-black/10 px-4 text-[9px] font-black uppercase">Dodaj pomiar</button></div><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Następny trening", client.nextSession], ["Masa", client.weight], ["Tkanka tłuszczowa", client.bodyFat], ["Frekwencja", client.attendance]].map(([label, value]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase tracking-wider text-black/30">{label}</p><p className="mt-2 text-sm font-black">{value}</p></div>)}</div></section></div><aside className="space-y-4"><section className={`${cardClass} p-5`}><h2 className="font-black">Profil współpracy</h2><dl className="mt-4 space-y-4">{[["Cel", client.goal], ["Dołączył", client.joined], ["Ostatni check-in", client.lastCheckin], ["Telefon", client.phone || "Brak"]].map(([label, value]) => <div key={label}><dt className="text-[8px] font-black uppercase tracking-wider text-black/30">{label}</dt><dd className="mt-1 text-xs font-bold">{value}</dd></div>)}</dl><div className="mt-5 flex flex-wrap gap-1.5">{client.tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</div></section><InvitationCard invitation={invitation} clientName={client.name} onNew={onNewInvitation} onCopy={onCopy}/></aside></div> : null}
 
     {tab === "plan" ? <section className={`${cardClass} p-5 sm:p-7`}><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/30">Aktualny program</p><h2 className="mt-2 text-2xl font-black">{client.plan}</h2><p className="mt-1 text-xs text-black/40">{client.goal} · realizacja {client.progress}%</p></div><div className="flex gap-2"><button onClick={onOpenPlan} className="h-11 rounded-full border border-black/10 px-5 text-[9px] font-black uppercase">Edytuj plan</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">Rozpocznij trening</button></div></div><div className="mt-6"><ProgressBar value={client.progress}/></div></section> : null}
 
-    {tab === "history" ? <section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] p-5"><h2 className="font-black">Historia treningów</h2><p className="text-[10px] text-black/36">Ostatnie zapisane aktywności klienta</p></div>{["Ostatni trening", "Tydzień temu", "Dwa tygodnie temu"].map((date, index) => <div key={date} className="flex min-h-16 items-center gap-3 border-b border-black/[0.055] px-5 py-3 last:border-0"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><CheckCircle2 size={15}/></span><span className="min-w-0 flex-1"><span className="block text-xs font-black">{client.plan}</span><span className="block text-[9px] text-black/36">{date} · {index === 0 ? "Trening zapisany" : "Zrealizowany"}</span></span><ChevronRight size={14}/></div>)}</section> : null}
+    {tab === "history" ? <section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] p-5"><h2 className="font-black">Historia treningów</h2><p className="text-[10px] text-black/36">Ostatnie zapisane aktywności podopiecznego</p></div>{["Ostatni trening", "Tydzień temu", "Dwa tygodnie temu"].map((date, index) => <div key={date} className="flex min-h-16 items-center gap-3 border-b border-black/[0.055] px-5 py-3 last:border-0"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><CheckCircle2 size={15}/></span><span className="min-w-0 flex-1"><span className="block text-xs font-black">{client.plan}</span><span className="block text-[9px] text-black/36">{date} · {index === 0 ? "Trening zapisany" : "Zrealizowany"}</span></span><ChevronRight size={14}/></div>)}</section> : null}
 
     {tab === "progress" ? <section className={`${cardClass} p-5 sm:p-7`}><div className="flex items-center justify-between"><div><h2 className="font-black">Postępy klienta</h2><p className="text-[10px] text-black/36">Pomiary i realizacja planu</p></div><button onClick={() => onAction("measurement")} className="h-10 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white">Dodaj pomiar</button></div><div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Realizacja", `${client.progress}%`], ["Masa", client.weight], ["Tkanka tłuszczowa", client.bodyFat], ["Frekwencja", client.attendance]].map(([label, value]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase text-black/30">{label}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}</div><div className="mt-7 flex h-40 items-end gap-2 border-b border-black/10">{[42, 48, 54, 61, 67, 72, 78, Math.max(client.progress, 30)].map((value, index) => <div key={index} className="ui-bar flex-1 rounded-t-lg" style={{ height: `${value}%`, opacity: .3 + index * .08 }}/>)}</div></section> : null}
 
-    {tab === "notes" ? <section className={`${cardClass} p-5 sm:p-7`}><h2 className="font-black">Notatki trenera</h2><p className="mt-1 text-[10px] text-black/36">Prywatne informacje dotyczące współpracy i kolejnych kroków.</p><textarea value={note} onChange={(event) => setNote(event.target.value)} className="mt-5 min-h-40 w-full rounded-2xl bg-[#f3f3f1] p-4 text-sm outline-none" placeholder="Dodaj obserwacje, ustalenia lub plan działania…"/><button onClick={() => notify("Notatka klienta została zapisana")} disabled={!note.trim()} className="mt-4 h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white disabled:opacity-35">Zapisz notatkę</button></section> : null}
+    {tab === "notes" ? <section className={`${cardClass} p-5 sm:p-7`}><h2 className="font-black">Notatki trenera</h2><p className="mt-1 text-[10px] text-black/36">Prywatne informacje dotyczące współpracy i kolejnych kroków.</p><textarea value={note} onChange={(event) => setNote(event.target.value)} className="mt-5 min-h-40 w-full rounded-2xl bg-[#f3f3f1] p-4 text-sm outline-none" placeholder="Dodaj obserwacje, ustalenia lub plan działania…"/><button onClick={() => notify("Notatka podopiecznego została zapisana")} disabled={!note.trim()} className="mt-4 h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white disabled:opacity-35">Zapisz notatkę</button></section> : null}
   </>;
 }
 
@@ -1187,13 +1277,20 @@ function InvitationCard({ invitation, clientName, onNew, onCopy }: { invitation?
 
 type CalendarMode = "day" | "week" | "month";
 
-function CalendarView({ clients, appointments, onSchedule, onOpenClient, onStartWorkout, onCancel, onDelete }: { clients: Client[]; appointments: CalendarAppointment[]; onSchedule: (input: { id?: string; date: string; hour: number; clientId: string }) => void; onOpenClient: (id: string) => void; onStartWorkout: (id: string) => void; onCancel: (id: string) => void; onDelete: (id: string) => void }) {
+function CalendarView({ clients, appointments, onSchedule, onOpenClient, onStartWorkout, onCancel, onDelete, autoSchedule = false }: { clients: Client[]; appointments: CalendarAppointment[]; onSchedule: (input: { id?: string; date: string; hour: number; clientId: string }) => void; onOpenClient: (id: string) => void; onStartWorkout: (id: string) => void; onCancel: (id: string) => void; onDelete: (id: string) => void; autoSchedule?: boolean }) {
   const today = dateKey(new Date());
+  const hours = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
   const [mode, setMode] = useState<CalendarMode>("day");
   const [selectedDate, setSelectedDate] = useState(today);
-  const [slot, setSlot] = useState<{ date: string; hour: number; appointmentId?: string } | null>(null);
+  // Wejście z pulpitu otwiera od razu wybór terminu na najbliższej wolnej godzinie dziś.
+  const [slot, setSlot] = useState<{ date: string; hour: number; appointmentId?: string } | null>(() => {
+    if (!autoSchedule) return null;
+    const nowHour = new Date().getHours();
+    const taken = new Set(appointments.filter((item) => item.date === today && item.status !== "Anulowany").map((item) => item.hour));
+    const free = hours.find((hour) => hour >= nowHour && !taken.has(hour)) ?? hours.find((hour) => !taken.has(hour)) ?? hours[0];
+    return { date: today, hour: free };
+  });
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const hours = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
   const selected = dateFromKey(selectedDate);
   const weekStart = startOfWeek(selected);
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
@@ -1235,15 +1332,15 @@ function CalendarView({ clients, appointments, onSchedule, onOpenClient, onStart
       {mode === "day" ? <div className="max-h-[680px] overflow-y-auto">{hours.map((hour) => {
         const appointment = slotMap.get(`${selectedDate}-${hour}`);
         const client = appointment ? clientMap.get(appointment.clientId) : null;
-        return <div key={`${selectedDate}-${hour}`} className="grid min-h-[78px] grid-cols-[58px_1fr] border-b border-black/[0.055] p-2.5 last:border-0 sm:grid-cols-[74px_1fr] sm:px-5"><div className="pt-3"><p className="text-xs font-black">{String(hour).padStart(2, "0")}:00</p><p className="text-[8px] text-black/30">pełna godzina</p></div>{appointment ? <button onClick={() => setPreviewId(appointment.id)} className={`fb-dark-surface flex min-w-0 items-center gap-3 rounded-2xl bg-[#0b0b0d] px-4 py-3 text-left text-white ${appointment.status === "Anulowany" ? "opacity-45" : ""}`}><Avatar initials={client?.initials ?? "?"} size="sm"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client?.name ?? "Usunięty klient"}</span><span className="mt-1 block truncate text-[9px] text-white/42">{appointment.kind ?? "Trening personalny"} · 60 min · {appointment.status ?? "Zaplanowany"}</span></span><ChevronRight size={15}/></button> : <button onClick={() => setSlot({ date: selectedDate, hour })} className="flex min-h-14 items-center justify-between rounded-2xl border border-dashed border-black/10 px-4 text-left text-[10px] font-bold text-black/34 hover:border-black/30"><span>Wolny termin</span><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><Plus size={15}/></span></button>}</div>;
+        return <div key={`${selectedDate}-${hour}`} className="grid min-h-[78px] grid-cols-[58px_1fr] border-b border-black/[0.055] p-2.5 last:border-0 sm:grid-cols-[74px_1fr] sm:px-5"><div className="pt-3"><p className="text-xs font-black">{String(hour).padStart(2, "0")}:00</p><p className="text-[8px] text-black/30">pełna godzina</p></div>{appointment ? <button onClick={() => setPreviewId(appointment.id)} className={`fb-dark-surface flex min-w-0 items-center gap-3 rounded-2xl bg-[#0b0b0d] px-4 py-3 text-left text-white ${appointment.status === "Anulowany" ? "opacity-45" : ""}`}><Avatar initials={client?.initials ?? "?"} size="sm"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client?.name ?? "Usunięty podopieczny"}</span><span className="mt-1 block truncate text-[9px] text-white/42">{appointment.kind ?? "Trening personalny"} · 60 min · {appointment.status ?? "Zaplanowany"}</span></span><ChevronRight size={15}/></button> : <button onClick={() => setSlot({ date: selectedDate, hour })} className="flex min-h-14 items-center justify-between rounded-2xl border border-dashed border-black/10 px-4 text-left text-[10px] font-bold text-black/34 hover:border-black/30"><span>Wolny termin</span><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><Plus size={15}/></span></button>}</div>;
       })}</div> : null}
 
-      {mode === "week" ? <div className="overflow-x-auto"><div className="min-w-[780px]"><div className="grid grid-cols-[58px_repeat(7,minmax(100px,1fr))] border-b border-black/[0.06]"><div/>{weekDays.map((day) => { const key = dateKey(day); return <button key={key} onClick={() => openDay(key)} className={`border-l border-black/[0.055] px-2 py-3 text-center text-[9px] font-black uppercase ${key === selectedDate ? "fb-selected" : key === today ? "bg-black/[0.04]" : ""}`}>{new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "numeric" }).format(day)}</button>; })}</div><div className="max-h-[620px] overflow-y-auto">{hours.map((hour) => <div key={hour} className="grid grid-cols-[58px_repeat(7,minmax(100px,1fr))]"><div className="h-[68px] border-b border-black/[0.045] pr-2 pt-2 text-right text-[9px] text-black/30">{String(hour).padStart(2, "0")}:00</div>{weekDays.map((day) => { const key = dateKey(day); const appointment = slotMap.get(`${key}-${hour}`); const client = appointment ? clientMap.get(appointment.clientId) : null; return <button key={`${key}-${hour}`} onClick={() => appointment ? setPreviewId(appointment.id) : setSlot({ date: key, hour })} aria-label={appointment ? `${client?.name ?? "Usunięty klient"}, ${key}, ${hour}:00` : `Wolny termin, ${key}, ${hour}:00`} className="h-[68px] border-b border-l border-black/[0.045] p-1.5 text-left hover:bg-black/[0.025]">{appointment ? <span className={`block h-full rounded-xl bg-black p-2 text-white ${appointment.status === "Anulowany" ? "opacity-40" : ""}`}><span className="block truncate text-[9px] font-black">{client?.name ?? "Usunięty klient"}</span><span className="mt-1 block truncate text-[7px] text-white/42">{appointment.status ?? "Zaplanowany"}</span></span> : <span className="grid h-full place-items-center text-black/20"><Plus size={14}/></span>}</button>; })}</div>)}</div></div></div> : null}
+      {mode === "week" ? <div className="overflow-x-auto"><div className="min-w-[780px]"><div className="grid grid-cols-[58px_repeat(7,minmax(100px,1fr))] border-b border-black/[0.06]"><div/>{weekDays.map((day) => { const key = dateKey(day); return <button key={key} onClick={() => openDay(key)} className={`border-l border-black/[0.055] px-2 py-3 text-center text-[9px] font-black uppercase ${key === selectedDate ? "fb-selected" : key === today ? "bg-black/[0.04]" : ""}`}>{new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "numeric" }).format(day)}</button>; })}</div><div className="max-h-[620px] overflow-y-auto">{hours.map((hour) => <div key={hour} className="grid grid-cols-[58px_repeat(7,minmax(100px,1fr))]"><div className="h-[68px] border-b border-black/[0.045] pr-2 pt-2 text-right text-[9px] text-black/30">{String(hour).padStart(2, "0")}:00</div>{weekDays.map((day) => { const key = dateKey(day); const appointment = slotMap.get(`${key}-${hour}`); const client = appointment ? clientMap.get(appointment.clientId) : null; return <button key={`${key}-${hour}`} onClick={() => appointment ? setPreviewId(appointment.id) : setSlot({ date: key, hour })} aria-label={appointment ? `${client?.name ?? "Usunięty podopieczny"}, ${key}, ${hour}:00` : `Wolny termin, ${key}, ${hour}:00`} className="h-[68px] border-b border-l border-black/[0.045] p-1.5 text-left hover:bg-black/[0.025]">{appointment ? <span className={`block h-full rounded-xl bg-black p-2 text-white ${appointment.status === "Anulowany" ? "opacity-40" : ""}`}><span className="block truncate text-[9px] font-black">{client?.name ?? "Usunięty podopieczny"}</span><span className="mt-1 block truncate text-[7px] text-white/42">{appointment.status ?? "Zaplanowany"}</span></span> : <span className="grid h-full place-items-center text-black/20"><Plus size={14}/></span>}</button>; })}</div>)}</div></div></div> : null}
 
       {mode === "month" ? <div><div className="grid grid-cols-7 border-b border-black/[0.06]">{["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"].map((label) => <div key={label} className="py-2 text-center text-[8px] font-black uppercase text-black/30">{label}</div>)}</div><div className="grid grid-cols-7">{monthDays.map((day) => { const key = dateKey(day); const dayAppointments = appointments.filter((appointment) => appointment.date === key && appointment.status !== "Anulowany"); const inMonth = day.getMonth() === selected.getMonth(); return <button key={key} onClick={() => openDay(key)} className={`min-h-[68px] border-b border-r border-black/[0.05] p-2 text-left sm:min-h-[92px] ${inMonth ? "" : "opacity-28"} ${key === today ? "bg-black/[0.04]" : ""}`}><span className={`grid h-7 w-7 place-items-center rounded-full text-[9px] font-black ${key === today ? "bg-black text-white" : ""}`}>{day.getDate()}</span>{dayAppointments.length ? <span className="mt-2 block rounded-full bg-[#ffc400] px-2 py-1 text-center text-[8px] font-black text-[#050505]">{dayAppointments.length} {dayAppointments.length === 1 ? "trening" : "treningi"}</span> : null}</button>; })}</div></div> : null}
     </section>
 
-    <section className={`${cardClass} mt-4 overflow-hidden`}><div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4"><div><h2 className="font-black">Ostatnie terminy</h2><p className="text-[10px] text-black/36">Anulowane terminy pozostają w historii</p></div><Badge tone="dark">Historia</Badge></div>{history.length ? <div className="grid gap-px bg-black/[0.05] md:grid-cols-2 xl:grid-cols-3">{history.slice(0, 6).map((appointment) => { const client = clientMap.get(appointment.clientId); return <button key={appointment.id} onClick={() => setPreviewId(appointment.id)} className="flex min-h-16 items-center gap-3 bg-white p-4 text-left"><span className="grid h-10 w-10 place-items-center rounded-full bg-black text-[8px] font-black text-white">{String(appointment.hour).padStart(2, "0")}:00</span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client?.name ?? "Usunięty klient"}</span><span className="block truncate text-[9px] text-black/36">{formatCalendarDate(appointment.date)} · {appointment.status ?? "Zaplanowany"}</span></span><ChevronRight size={14}/></button>; })}</div> : <div className="p-6 text-xs text-black/40">Historia pojawi się po pierwszych zakończonych terminach.</div>}</section>
+    <section className={`${cardClass} mt-4 overflow-hidden`}><div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4"><div><h2 className="font-black">Ostatnie terminy</h2><p className="text-[10px] text-black/36">Anulowane terminy pozostają w historii</p></div><Badge tone="dark">Historia</Badge></div>{history.length ? <div className="grid gap-px bg-black/[0.05] md:grid-cols-2 xl:grid-cols-3">{history.slice(0, 6).map((appointment) => { const client = clientMap.get(appointment.clientId); return <button key={appointment.id} onClick={() => setPreviewId(appointment.id)} className="flex min-h-16 items-center gap-3 bg-white p-4 text-left"><span className="grid h-10 w-10 place-items-center rounded-full bg-black text-[8px] font-black text-white">{String(appointment.hour).padStart(2, "0")}:00</span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client?.name ?? "Usunięty podopieczny"}</span><span className="block truncate text-[9px] text-black/36">{formatCalendarDate(appointment.date)} · {appointment.status ?? "Zaplanowany"}</span></span><ChevronRight size={14}/></button>; })}</div> : <div className="p-6 text-xs text-black/40">Historia pojawi się po pierwszych zakończonych terminach.</div>}</section>
 
     {slot ? <ScheduleDialog slot={slot} clients={clients} currentClientId={appointments.find((appointment) => appointment.id === slot.appointmentId)?.clientId} onClose={() => setSlot(null)} onSelect={(clientId) => { onSchedule({ id: slot.appointmentId, date: slot.date, hour: slot.hour, clientId }); setSlot(null); }}/> : null}
     {preview ? <AppointmentDetails appointment={preview} client={clientMap.get(preview.clientId)} onClose={() => setPreviewId(null)} onEdit={() => { setPreviewId(null); setSlot({ date: preview.date, hour: preview.hour, appointmentId: preview.id }); }} onOpenClient={() => { setPreviewId(null); onOpenClient(preview.clientId); }} onStartWorkout={() => { setPreviewId(null); onStartWorkout(preview.clientId); }} onCancel={() => { onCancel(preview.id); setPreviewId(null); }} onDelete={() => { onDelete(preview.id); setPreviewId(null); }}/> : null}
@@ -1252,7 +1349,7 @@ function CalendarView({ clients, appointments, onSchedule, onOpenClient, onStart
 
 function AppointmentDetails({ appointment, client, onClose, onEdit, onOpenClient, onStartWorkout, onCancel, onDelete }: { appointment: CalendarAppointment; client?: Client; onClose: () => void; onEdit: () => void; onOpenClient: () => void; onStartWorkout: () => void; onCancel: () => void; onDelete: () => void }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  return <div className="fixed inset-0 z-[86] grid place-items-end bg-black/55 backdrop-blur-sm sm:place-items-center sm:p-4"><button className="absolute inset-0" onClick={onClose} aria-label="Zamknij podgląd terminu"/><section role="dialog" aria-modal="true" aria-labelledby="appointment-title" className="relative w-full rounded-t-[28px] bg-white p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-lg sm:rounded-[28px]"><button onClick={onClose} className="absolute right-5 top-5 grid h-10 w-10 place-items-center rounded-full bg-[#f1f1ef]" aria-label="Zamknij"><X size={16}/></button><p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/32">Szczegóły terminu</p><h2 id="appointment-title" className="mt-2 pr-12 text-2xl font-black tracking-[-0.04em]">{client?.name ?? "Usunięty klient"}</h2><p className="mt-1 text-xs text-black/40">{formatCalendarDate(appointment.date)} · {String(appointment.hour).padStart(2, "0")}:00–{String(appointment.hour + 1).padStart(2, "0")}:00</p><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase text-black/30">Typ</p><p className="mt-2 text-xs font-black">{appointment.kind ?? "Trening personalny"}</p></div><div className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase text-black/30">Status</p><p className="mt-2 text-xs font-black">{appointment.status ?? "Zaplanowany"}</p></div></div><div className="mt-5 grid gap-2 sm:grid-cols-2"><button onClick={onStartWorkout} disabled={!client || appointment.status === "Anulowany"} className="h-12 rounded-full bg-black px-5 text-[10px] font-black uppercase text-white disabled:opacity-35">Otwórz trening</button><button onClick={onOpenClient} disabled={!client} className="h-12 rounded-full border border-black/10 px-5 text-[10px] font-black uppercase disabled:opacity-35">Otwórz klienta</button><button onClick={onEdit} className="h-12 rounded-full border border-black/10 px-5 text-[10px] font-black uppercase">Edytuj termin</button><button onClick={onCancel} disabled={appointment.status === "Anulowany"} className="h-12 rounded-full border border-black/10 px-5 text-[10px] font-black uppercase disabled:opacity-35">Anuluj termin</button></div><button onClick={() => confirmDelete ? onDelete() : setConfirmDelete(true)} className={`mt-4 h-11 w-full rounded-full text-[9px] font-black uppercase ${confirmDelete ? "bg-red-50 text-red-700" : "text-black/38"}`}>{confirmDelete ? "Potwierdź usunięcie terminu" : "Usuń termin"}</button></section></div>;
+  return <div className="fixed inset-0 z-[86] grid place-items-end bg-black/55 backdrop-blur-sm sm:place-items-center sm:p-4"><button className="absolute inset-0" onClick={onClose} aria-label="Zamknij podgląd terminu"/><section role="dialog" aria-modal="true" aria-labelledby="appointment-title" className="relative w-full rounded-t-[28px] bg-white p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-lg sm:rounded-[28px]"><button onClick={onClose} className="absolute right-5 top-5 grid h-10 w-10 place-items-center rounded-full bg-[#f1f1ef]" aria-label="Zamknij"><X size={16}/></button><p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/32">Szczegóły terminu</p><h2 id="appointment-title" className="mt-2 pr-12 text-2xl font-black tracking-[-0.04em]">{client?.name ?? "Usunięty podopieczny"}</h2><p className="mt-1 text-xs text-black/40">{formatCalendarDate(appointment.date)} · {String(appointment.hour).padStart(2, "0")}:00–{String(appointment.hour + 1).padStart(2, "0")}:00</p><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase text-black/30">Typ</p><p className="mt-2 text-xs font-black">{appointment.kind ?? "Trening personalny"}</p></div><div className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase text-black/30">Status</p><p className="mt-2 text-xs font-black">{appointment.status ?? "Zaplanowany"}</p></div></div><div className="mt-5 grid gap-2 sm:grid-cols-2"><button onClick={onStartWorkout} disabled={!client || appointment.status === "Anulowany"} className="h-12 rounded-full bg-black px-5 text-[10px] font-black uppercase text-white disabled:opacity-35">Otwórz trening</button><button onClick={onOpenClient} disabled={!client} className="h-12 rounded-full border border-black/10 px-5 text-[10px] font-black uppercase disabled:opacity-35">Otwórz klienta</button><button onClick={onEdit} className="h-12 rounded-full border border-black/10 px-5 text-[10px] font-black uppercase">Edytuj termin</button><button onClick={onCancel} disabled={appointment.status === "Anulowany"} className="h-12 rounded-full border border-black/10 px-5 text-[10px] font-black uppercase disabled:opacity-35">Anuluj termin</button></div><button onClick={() => confirmDelete ? onDelete() : setConfirmDelete(true)} className={`mt-4 h-11 w-full rounded-full text-[9px] font-black uppercase ${confirmDelete ? "bg-red-50 text-red-700" : "text-black/38"}`}>{confirmDelete ? "Potwierdź usunięcie terminu" : "Usuń termin"}</button></section></div>;
 }
 
 function ScheduleDialog({ slot, clients, currentClientId, onClose, onSelect }: { slot: { date: string; hour: number; appointmentId?: string }; clients: Client[]; currentClientId?: string; onClose: () => void; onSelect: (clientId: string) => void }) {
@@ -1279,7 +1376,7 @@ function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onClose
   return <>
     <PageHeader
       title="Plany treningowe"
-      subtitle="Programy klientów w jednym miejscu — bez duplikatów i zbędnych ekranów."
+      subtitle="Programy podopiecznych w jednym miejscu — bez duplikatów i zbędnych ekranów."
       action="Nowy plan"
       onAction={() => setWizardMode("personal")}
       secondary={<button onClick={() => setWizardMode("template")} className="h-11 rounded-full border border-black/10 bg-white px-4 text-[10px] font-black uppercase tracking-wider"><Library size={14} className="mr-2 inline"/>Użyj szablonu</button>}
@@ -1300,12 +1397,12 @@ function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onClose
           <div className="flex items-start justify-between gap-3"><Badge tone="dark">{plan.category}</Badge><Badge tone="good">Aktywny</Badge></div>
           <h3 className="mt-5 text-xl font-black tracking-[-0.035em]">{plan.name}</h3>
           <p className="mt-1 text-[10px] text-black/38">{plan.days} dni · {plan.duration} · {plan.exercises} ćwiczeń</p>
-          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-[#f3f3f1] p-3"><Avatar initials={client?.initials ?? "—"} size="sm" dark/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client?.name ?? "Plan bez przypisanego klienta"}</span><span className="mt-0.5 block truncate text-[9px] text-black/36">{client?.goal ?? "Przypisz klienta w edytorze"}</span></span><ChevronRight size={15}/></div>
+          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-[#f3f3f1] p-3"><Avatar initials={client?.initials ?? "—"} size="sm" dark/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client?.name ?? "Plan bez przypisanego podopiecznego"}</span><span className="mt-0.5 block truncate text-[9px] text-black/36">{client?.goal ?? "Przypisz podopiecznego w edytorze"}</span></span><ChevronRight size={15}/></div>
           <div className="mt-5"><div className="mb-2 flex justify-between text-[9px]"><span className="text-black/36">Realizacja planu</span><strong>{plan.completion}%</strong></div><ProgressBar value={plan.completion}/></div>
         </button>
         <div className="flex items-center justify-between border-t border-black/[0.055] px-5 py-3"><span className="text-[9px] text-black/34">Aktualizacja: {plan.updated}</span><button onClick={() => { onOpenDetail(plan.id); notify(`Otwierasz plan: ${plan.name}`); }} className="h-10 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white">Otwórz plan</button></div>
       </article>;
-    })}</div> : <section className={cardClass}><EmptyState icon={Dumbbell} title="Nie masz jeszcze planów" text="Utwórz pierwszy plan i przypisz go do klienta."/></section>}
+    })}</div> : <section className={cardClass}><EmptyState icon={Dumbbell} title="Nie masz jeszcze planów" text="Utwórz pierwszy plan i przypisz go do podopiecznego."/></section>}
 
     {wizardMode ? <PlanWizard mode={wizardMode} clients={clients} onClose={() => setWizardMode(null)} onSave={(plan, clientId) => { onSavePlan(plan, clientId); setWizardMode(null); }}/> : null}
     {editingPlan ? <PlanEditor plan={editingPlan} onClose={() => setEditingPlan(null)} onSave={(plan) => { onUpdatePlan(plan); setEditingPlan(null); }}/> : null}
@@ -1386,12 +1483,12 @@ function MessagesView({ selected, onSelect, messages, setMessages, message, setM
   if (!conversations.length) return <><PageHeader title="Wiadomości" subtitle="Rozmowy z podopiecznymi." action="Nowa wiadomość"/><section className={cardClass}><EmptyState icon={MessageCircle} title="Brak rozmów" text="Rozmowy pojawią się po dodaniu i aktywowaniu pierwszego podopiecznego."/></section></>;
   const current = conversations.find((c) => c.id === selected) ?? conversations[0];
   function send() { if (!message.trim()) return; setMessages((m) => [...m, message.trim()]); setMessage(""); }
-  return <><PageHeader title="Wiadomości" subtitle="3 nieprzeczytane wiadomości od klientów." action="Nowa wiadomość" /><div className={`${cardClass} grid min-h-[620px] overflow-hidden md:grid-cols-[310px_1fr]`}><aside className="border-r border-black/[0.06]"><div className="border-b border-black/[0.06] p-4"><div className="flex items-center gap-2 rounded-full bg-[#f1f1ef] px-3 py-2"><Search size={14} className="text-black/30" /><input className="min-w-0 flex-1 bg-transparent text-xs outline-none" placeholder="Szukaj rozmowy" /></div></div>{conversations.map((chat) => <button key={chat.id} onClick={() => onSelect(chat.id)} className={`flex w-full gap-3 border-b border-black/[0.05] p-4 text-left ${selected === chat.id ? "bg-black text-white" : "hover:bg-black/[0.02]"}`}><div className="relative"><Avatar initials={chat.initials} dark={selected !== chat.id} /><span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 ${selected === chat.id ? "border-black" : "border-white"} ${chat.online ? "bg-emerald-400" : "bg-black/20"}`} /></div><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><p className="truncate text-xs font-black">{chat.name}</p><span className={`text-[8px] ${selected === chat.id ? "text-white/35" : "text-black/28"}`}>{chat.time}</span></div><p className={`mt-1 truncate text-[10px] ${selected === chat.id ? "text-white/42" : "text-black/38"}`}>{chat.preview}</p></div>{chat.unread ? <span className={`grid h-5 min-w-5 place-items-center rounded-full text-[8px] font-black ${selected === chat.id ? "bg-white text-black" : "bg-black text-white"}`}>{chat.unread}</span> : null}</button>)}</aside><section className="flex min-h-[520px] flex-col"><div className="flex items-center gap-3 border-b border-black/[0.06] px-5 py-4"><Avatar initials={current.initials} dark /><div><p className="text-sm font-black">{current.name}</p><p className="text-[9px] text-black/34">{current.online ? "Aktywny teraz" : "Ostatnio aktywny wczoraj"}</p></div><button className="ml-auto"><MoreHorizontal size={19} /></button></div><div className="flex-1 space-y-4 overflow-auto bg-[#fafaf8] p-5">{messages.map((text,i) => <div key={`${text}${i}`} className={`max-w-[78%] rounded-2xl px-4 py-3 text-xs leading-5 ${i % 2 === 0 ? "bg-white shadow-sm" : "ml-auto bg-black text-white"}`}>{text}</div>)}</div><div className="flex gap-2 border-t border-black/[0.06] p-4"><input value={message} onChange={(e)=>setMessage(e.target.value)} onKeyDown={(e)=>{if(e.key==="Enter")send();}} className="h-11 min-w-0 flex-1 rounded-full bg-[#f1f1ef] px-4 text-xs outline-none" placeholder="Napisz wiadomość…" /><button onClick={send} className="grid h-11 w-11 place-items-center rounded-full bg-black text-white"><Send size={16} /></button></div></section></div></>;
+  return <><PageHeader title="Wiadomości" subtitle="3 nieprzeczytane wiadomości od podopiecznych." action="Nowa wiadomość" /><div className={`${cardClass} grid min-h-[620px] overflow-hidden md:grid-cols-[310px_1fr]`}><aside className="border-r border-black/[0.06]"><div className="border-b border-black/[0.06] p-4"><div className="flex items-center gap-2 rounded-full bg-[#f1f1ef] px-3 py-2"><Search size={14} className="text-black/30" /><input className="min-w-0 flex-1 bg-transparent text-xs outline-none" placeholder="Szukaj rozmowy" /></div></div>{conversations.map((chat) => <button key={chat.id} onClick={() => onSelect(chat.id)} className={`flex w-full gap-3 border-b border-black/[0.05] p-4 text-left ${selected === chat.id ? "bg-black text-white" : "hover:bg-black/[0.02]"}`}><div className="relative"><Avatar initials={chat.initials} dark={selected !== chat.id} /><span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 ${selected === chat.id ? "border-black" : "border-white"} ${chat.online ? "bg-emerald-400" : "bg-black/20"}`} /></div><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><p className="truncate text-xs font-black">{chat.name}</p><span className={`text-[8px] ${selected === chat.id ? "text-white/35" : "text-black/28"}`}>{chat.time}</span></div><p className={`mt-1 truncate text-[10px] ${selected === chat.id ? "text-white/42" : "text-black/38"}`}>{chat.preview}</p></div>{chat.unread ? <span className={`grid h-5 min-w-5 place-items-center rounded-full text-[8px] font-black ${selected === chat.id ? "bg-white text-black" : "bg-black text-white"}`}>{chat.unread}</span> : null}</button>)}</aside><section className="flex min-h-[520px] flex-col"><div className="flex items-center gap-3 border-b border-black/[0.06] px-5 py-4"><Avatar initials={current.initials} dark /><div><p className="text-sm font-black">{current.name}</p><p className="text-[9px] text-black/34">{current.online ? "Aktywny teraz" : "Ostatnio aktywny wczoraj"}</p></div><button className="ml-auto"><MoreHorizontal size={19} /></button></div><div className="flex-1 space-y-4 overflow-auto bg-[#fafaf8] p-5">{messages.map((text,i) => <div key={`${text}${i}`} className={`max-w-[78%] rounded-2xl px-4 py-3 text-xs leading-5 ${i % 2 === 0 ? "bg-white shadow-sm" : "ml-auto bg-black text-white"}`}>{text}</div>)}</div><div className="flex gap-2 border-t border-black/[0.06] p-4"><input value={message} onChange={(e)=>setMessage(e.target.value)} onKeyDown={(e)=>{if(e.key==="Enter")send();}} className="h-11 min-w-0 flex-1 rounded-full bg-[#f1f1ef] px-4 text-xs outline-none" placeholder="Napisz wiadomość…" /><button onClick={send} className="grid h-11 w-11 place-items-center rounded-full bg-black text-white"><Send size={16} /></button></div></section></div></>;
 }
 
 function TasksView({ tasks, setTasks }: { tasks: typeof initialTasks; setTasks: React.Dispatch<React.SetStateAction<typeof initialTasks>> }) {
   if (!tasks.length) return <><PageHeader title="Zadania" subtitle="Lista spraw wymagających uwagi trenera." action="Dodaj zadanie"/><section className={cardClass}><EmptyState icon={CheckSquare} title="Brak zadań" text="Nowe zadania i przypomnienia pojawią się w tym miejscu."/></section></>;
-  return <><PageHeader title="Zadania" subtitle={`${tasks.filter((t)=>!t.done).length} zadań pozostało do wykonania.`} action="Dodaj zadanie" /><div className="grid gap-4 xl:grid-cols-[1.25fr_.75fr]"><section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] px-6 py-4"><h2 className="font-black">Dzisiaj i najbliższe dni</h2></div>{tasks.map((task)=><button key={task.id} onClick={()=>setTasks((all)=>all.map((item)=>item.id===task.id?{...item,done:!item.done}:item))} className="flex w-full items-center gap-4 border-b border-black/[0.055] px-5 py-4 text-left last:border-0 sm:px-6">{task.done?<CheckCircle2 size={21} className="shrink-0" />:<Circle size={21} className="shrink-0 text-black/25" />}<div className="min-w-0 flex-1"><p className={`truncate text-sm font-black ${task.done?"text-black/28 line-through":""}`}>{task.title}</p><p className="mt-1 text-[10px] text-black/34">{task.due} · {task.category}</p></div><Badge tone={task.priority==="Wysoki"?"bad":task.priority==="Średni"?"warn":"neutral"}>{task.priority}</Badge></button>)}</section><aside className="space-y-4"><section className="rounded-[24px] bg-black p-6 text-white"><p className="text-[10px] font-black uppercase tracking-wider text-white/38">Skuteczność tygodnia</p><p className="mt-4 text-4xl font-black">76%</p><p className="text-xs text-white/40">19 z 25 zadań</p><div className="mt-5"><ProgressBar value={76} dark /></div></section><section className={`${cardClass} p-5`}><h3 className="font-black">Według kategorii</h3><div className="mt-4 space-y-3">{[["Klienci",5], ["Plany",3], ["Administracja",2]].map(([label,count])=><div key={String(label)} className="flex items-center justify-between"><span className="text-xs text-black/48">{label}</span><strong className="text-xs">{count}</strong></div>)}</div></section></aside></div></>;
+  return <><PageHeader title="Zadania" subtitle={`${tasks.filter((t)=>!t.done).length} zadań pozostało do wykonania.`} action="Dodaj zadanie" /><div className="grid gap-4 xl:grid-cols-[1.25fr_.75fr]"><section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] px-6 py-4"><h2 className="font-black">Dzisiaj i najbliższe dni</h2></div>{tasks.map((task)=><button key={task.id} onClick={()=>setTasks((all)=>all.map((item)=>item.id===task.id?{...item,done:!item.done}:item))} className="flex w-full items-center gap-4 border-b border-black/[0.055] px-5 py-4 text-left last:border-0 sm:px-6">{task.done?<CheckCircle2 size={21} className="shrink-0" />:<Circle size={21} className="shrink-0 text-black/25" />}<div className="min-w-0 flex-1"><p className={`truncate text-sm font-black ${task.done?"text-black/28 line-through":""}`}>{task.title}</p><p className="mt-1 text-[10px] text-black/34">{task.due} · {task.category}</p></div><Badge tone={task.priority==="Wysoki"?"bad":task.priority==="Średni"?"warn":"neutral"}>{task.priority}</Badge></button>)}</section><aside className="space-y-4"><section className="rounded-[24px] bg-black p-6 text-white"><p className="text-[10px] font-black uppercase tracking-wider text-white/38">Skuteczność tygodnia</p><p className="mt-4 text-4xl font-black">76%</p><p className="text-xs text-white/40">19 z 25 zadań</p><div className="mt-5"><ProgressBar value={76} dark /></div></section><section className={`${cardClass} p-5`}><h3 className="font-black">Według kategorii</h3><div className="mt-4 space-y-3">{[["Podopieczni",5], ["Plany",3], ["Administracja",2]].map(([label,count])=><div key={String(label)} className="flex items-center justify-between"><span className="text-xs text-black/48">{label}</span><strong className="text-xs">{count}</strong></div>)}</div></section></aside></div></>;
 }
 
 function AutomationsView({ notify }: { notify: (text:string)=>void }) {
@@ -1402,7 +1499,7 @@ function AutomationsView({ notify }: { notify: (text:string)=>void }) {
 
 function MaterialsView({ notify }: { notify:(text:string)=>void }) {
   if (!materials.length) return <><PageHeader title="Materiały" subtitle="Pliki, poradniki i filmy dla podopiecznych." action="Dodaj materiał"/><section className={cardClass}><EmptyState icon={FolderOpen} title="Brak materiałów" text="Dodane pliki i materiały edukacyjne pojawią się tutaj."/></section></>;
-  return <><PageHeader title="Materiały" subtitle="Udostępniaj klientom pliki, poradniki i filmy." action="Dodaj materiał" secondary={<button className="h-11 rounded-full border border-black/10 bg-white px-4 text-xs font-bold"><Upload size={14} className="mr-2 inline" />Prześlij plik</button>} /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{materials.map((item,i)=><button onClick={()=>notify(`Otworzono: ${item.title}`)} key={item.title} className={`${cardClass} overflow-hidden text-left`}><div className={`grid h-36 place-items-center ${i%3===0?"bg-black text-white":"bg-[#e9e9e7] text-black"}`}>{item.type==="Wideo"?<Activity size={34}/>:item.type==="PDF"?<FileText size={34}/>:<BookOpen size={34}/>}</div><div className="p-5"><div className="flex justify-between gap-3"><Badge tone={i%3===0?"dark":"neutral"}>{item.type}</Badge><span className="text-[9px] text-black/30">{item.size}</span></div><h2 className="mt-4 font-black">{item.title}</h2><p className="mt-1 text-[10px] text-black/36">{item.category} · udostępniono {item.shared} klientom</p></div></button>)}</div></>;
+  return <><PageHeader title="Materiały" subtitle="Udostępniaj podopiecznym pliki, poradniki i filmy." action="Dodaj materiał" secondary={<button className="h-11 rounded-full border border-black/10 bg-white px-4 text-xs font-bold"><Upload size={14} className="mr-2 inline" />Prześlij plik</button>} /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{materials.map((item,i)=><button onClick={()=>notify(`Otworzono: ${item.title}`)} key={item.title} className={`${cardClass} overflow-hidden text-left`}><div className={`grid h-36 place-items-center ${i%3===0?"bg-black text-white":"bg-[#e9e9e7] text-black"}`}>{item.type==="Wideo"?<Activity size={34}/>:item.type==="PDF"?<FileText size={34}/>:<BookOpen size={34}/>}</div><div className="p-5"><div className="flex justify-between gap-3"><Badge tone={i%3===0?"dark":"neutral"}>{item.type}</Badge><span className="text-[9px] text-black/30">{item.size}</span></div><h2 className="mt-4 font-black">{item.title}</h2><p className="mt-1 text-[10px] text-black/36">{item.category} · udostępniono {item.shared} klientom</p></div></button>)}</div></>;
 }
 
 function ReportsView({ clients, appointments, workoutHistory, onExport }: { clients: Client[]; appointments: CalendarAppointment[]; workoutHistory: WorkoutCompletion[]; onExport: (weekLabel?: string) => void }) {
@@ -1520,7 +1617,7 @@ function ClientPortal({
     { id: "profile", label: "Profil", icon: Users },
   ];
   if (!program) {
-    return <div className="futurebody-app min-h-[100svh] bg-[#050505] text-[#f7f7f7]"><header className="fb-dark-surface flex h-[72px] items-center border-b border-white/[0.07] px-4 text-white"><img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover"/><div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">{previewMode ? "Tryb podglądu" : "Panel podopiecznego"}</p></div><button onClick={onLogout} className="ml-auto grid h-10 w-10 place-items-center rounded-full border border-white/10" aria-label="Wyloguj"><LogOut size={15}/></button></header><main className="grid min-h-[calc(100svh-72px)] place-items-center px-5 py-10"><section className={`${cardClass} w-full max-w-lg p-7 text-center sm:p-10`}><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-black text-white"><Dumbbell size={22}/></span><h1 className="mt-6 text-2xl font-black tracking-[-0.04em]">Plan jest w przygotowaniu</h1><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-black/42">Twój trener nie przypisał jeszcze aktywnego programu. Gdy plan będzie gotowy, pojawi się tutaj automatycznie.</p><button onClick={() => notify("Wiadomość do trenera została przygotowana")} className="mt-6 h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase text-white">Napisz do trenera</button></section></main></div>;
+    return <div className="futurebody-app futurebody-app-enter min-h-[100svh] bg-[#050505] text-[#f7f7f7]"><header className="fb-dark-surface flex h-[72px] items-center border-b border-white/[0.07] px-4 text-white"><img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover"/><div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">{previewMode ? "Tryb podglądu" : "Panel podopiecznego"}</p></div><button onClick={onLogout} className="ml-auto grid h-10 w-10 place-items-center rounded-full border border-white/10" aria-label="Wyloguj"><LogOut size={15}/></button></header><main className="grid min-h-[calc(100svh-72px)] place-items-center px-5 py-10"><section className={`${cardClass} w-full max-w-lg p-7 text-center sm:p-10`}><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-black text-white"><Dumbbell size={22}/></span><h1 className="mt-6 text-2xl font-black tracking-[-0.04em]">Plan jest w przygotowaniu</h1><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-black/42">Twój trener nie przypisał jeszcze aktywnego programu. Gdy plan będzie gotowy, pojawi się tutaj automatycznie.</p><button onClick={() => notify("Wiadomość do trenera została przygotowana")} className="mt-6 h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase text-white">Napisz do trenera</button></section></main></div>;
   }
   const activeWorkoutDay = program.trainingDays.find((day) => day.id === activeWorkoutDayId);
   const todayDay = program.trainingDays[0];
@@ -1531,7 +1628,7 @@ function ClientPortal({
   }
 
   return (
-    <div className="futurebody-app min-h-[100svh] bg-[#050505] text-[#f7f7f7]">
+    <div className="futurebody-app futurebody-app-enter min-h-[100svh] bg-[#050505] text-[#f7f7f7]">
       <header className="fb-dark-surface sticky top-0 z-30 border-b border-white/[0.07] bg-[#050505]/92 pt-[env(safe-area-inset-top)] text-white backdrop-blur-xl">
         <div className="mx-auto flex h-[70px] max-w-6xl items-center px-4 sm:px-7">
           <img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover" />

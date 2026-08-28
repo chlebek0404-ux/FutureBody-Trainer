@@ -10,7 +10,14 @@ export function getSupabaseBrowserClient() {
 
   browserClient = url && anonKey
     ? createClient(url, anonKey, {
-        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          // PKCE zwraca kod w parametrze zapytania. Domyślny tryb implicit oddaje
+          // token we fragmencie adresu, który w tej aplikacji obsługuje router widoków.
+          flowType: "pkce",
+        },
       })
     : null;
 
