@@ -293,6 +293,17 @@ select:focus-visible {
   backdrop-filter: none;
 }
 
+/* Stan wyłączony: neutralna powierzchnia zamiast przygaszonego złota. */
+.futurebody-app button.bg-black:disabled {
+  background: var(--fb-glass) !important;
+  background-image: none !important;
+  color: var(--fb-text-muted) !important;
+  border: 1px solid var(--fb-border);
+  box-shadow: none !important;
+  filter: none !important;
+  opacity: 1;
+}
+
 /* Sekcje na czarnym tle w markupie to panele wyróżnione. */
 .futurebody-app section.bg-black,
 .futurebody-app div.bg-black:not(.fb-selected) {
@@ -508,6 +519,29 @@ select:focus-visible {
 
 /* Karty w siatce mają równe wysokości. */
 .fb-grid-stretch > * { height: 100%; }
+
+/* Segmenty (zakładki wewnątrz ekranu) — jeden wzorzec dla całej aplikacji. */
+.fb-segment {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fb-text-muted);
+  transition: color var(--motion-fast) var(--motion-ease-soft), background-color var(--motion-fast) var(--motion-ease-soft);
+}
+
+.fb-segment:hover { color: var(--fb-text); }
+
+.fb-segment-active {
+  color: var(--fb-gold);
+  background: color-mix(in srgb, var(--fb-gold) 13%, transparent);
+}
 
 .futurebody-app input,
 .futurebody-app textarea,
