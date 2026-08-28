@@ -1330,6 +1330,15 @@ function InvitationCard({ invitation, clientName, onNew, onCopy }: { invitation?
 }
 
 
+/** Cele treningowe. Jedna lista dla dodawania podopiecznego i kreatora planu. */
+const trainingGoals = [
+  "Redukcja tkanki tłuszczowej",
+  "Budowa siły",
+  "Masa mięśniowa",
+  "Sprawność ogólna",
+  "Mobilność i powrót do ruchu",
+];
+
 type Measurement = { id: string; clientId: string; date: string; weight: string; bodyFat: string; note: string };
 
 type TrainerProfile = { fullName: string; email: string };
@@ -1836,7 +1845,7 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
               <p className="mt-1.5 text-sm text-black/42">{path === "auto" ? "Na tej podstawie dobierzemy ćwiczenia." : "Odpowiedzi sterują podpowiedziami przy wyborze ćwiczeń."}</p>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 {([
-                  ["goal", "Główny cel", ["Redukcja tkanki tłuszczowej", "Budowa siły", "Masa mięśniowa", "Sprawność ogólna", "Mobilność i powrót do ruchu"]],
+                  ["goal", "Główny cel", trainingGoals],
                   ["level", "Doświadczenie", ["Początkujący", "Średniozaawansowany", "Zaawansowany"]],
                   ["days", "Dni treningowe w tygodniu", ["2", "3", "4", "5"]],
                   ["duration", "Czas jednej sesji", ["30", "45", "60", "75"]],
@@ -2364,12 +2373,12 @@ function ActionModal({ type, clients, presetClient, onClose, onSave }: {
     client: ["Nowy podopieczny", "Dodaj podstawowe dane i od razu wygeneruj kod dostępu."],
     measurement: ["Nowy pomiar", presetClient ? `Zapiszemy w profilu: ${presetClient.name}.` : "Wybierz podopiecznego i zapisz wyniki."],
   };
-  const [form, setForm] = useState<Record<string, string>>({});
+  const [form, setForm] = useState<Record<string, string>>(type === "client" ? { goal: trainingGoals[0] } : {});
   // W profilu podopiecznego adresat jest znany, więc nie pytamy o niego ponownie.
   const [clientId, setClientId] = useState(presetClient?.id ?? "");
 
   const fields: [string, string][] = type === "client"
-    ? [["name", "Imię i nazwisko"], ["email", "Adres e-mail"], ["phone", "Telefon"], ["goal", "Główny cel"]]
+    ? [["name", "Imię i nazwisko"], ["email", "Adres e-mail"], ["phone", "Telefon"]]
     : [["weight", "Masa ciała (kg)"], ["bodyfat", "Tkanka tłuszczowa (%)"], ["note", "Notatka"]];
 
   return (
@@ -2407,6 +2416,26 @@ function ActionModal({ type, clients, presetClient, onClose, onSave }: {
               <div className="min-w-0">
                 <p className="truncate text-sm font-black">{presetClient.name}</p>
                 <p className="truncate text-[10px] text-black/40">{presetClient.goal}</p>
+              </div>
+            </div>
+          ) : null}
+
+          {type === "client" ? (
+            <div className="mb-4">
+              <span className="mb-2 block text-[9px] font-black uppercase tracking-wider text-black/32">Główny cel</span>
+              <div className="grid gap-2">
+                {trainingGoals.map((goal) => (
+                  <button
+                    key={goal}
+                    type="button"
+                    onClick={() => setForm((current) => ({ ...current, goal }))}
+                    aria-pressed={form.goal === goal}
+                    className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-[12px] font-black transition ${form.goal === goal ? "border-black bg-black text-white" : "border-black/[0.08] bg-[#f2f2f0]"}`}
+                  >
+                    {goal}
+                    {form.goal === goal ? <Check size={15} className="shrink-0" /> : null}
+                  </button>
+                ))}
               </div>
             </div>
           ) : null}
