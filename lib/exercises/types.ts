@@ -92,4 +92,10 @@ export type ExerciseRecord = Exercise & {
   secondaryMuscleLabels: string[];
   /** Tekst do wyszukiwania, znormalizowany bez znaków diakrytycznych. */
   searchText: string;
+  /** Skróty do wyświetlania w listach i planach, żeby widoki nie sklejały pól same. */
+  muscle: string;
+  equipmentLabel: string;
+  instruction: string;
+  commonMistake: string;
+  protocol: string;
 };

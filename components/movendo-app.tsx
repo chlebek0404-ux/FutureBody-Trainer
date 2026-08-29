@@ -57,12 +57,12 @@ import {
   type ClientInvitation,
 } from "@/lib/demo-data";
 import ExerciseMotion from "@/components/exercise-motion";
-import ExerciseLibraryPanel from "@/components/exercise-library-panel";
+import ExerciseLibrary from "@/components/exercise-library/exercise-library";
 import { PlanEditor } from "@/components/training-plan";
 import { NutritionEditor, NutritionView } from "@/components/nutrition-plan";
 import { calculateTargets, complianceForDay, sumMeals, todayKey, type MealLog, type NutritionPlan } from "@/lib/nutrition";
 import { ClientWorkout } from "@/components/client-workout";
-import { exerciseLibrary, searchExercises, suggestExercises } from "@/lib/exercise-library";
+import { exerciseLibrary, searchExercises, suggestExercises } from "@/lib/exercises";
 import { createTrainingDays, createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { enableSmoothWheelScroll } from "@/lib/smooth-scroll";
@@ -2188,7 +2188,7 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
 }
 
 function ExercisesView() {
-  return <ExerciseLibraryPanel />;
+  return <ExerciseLibrary />;
 }
 
 

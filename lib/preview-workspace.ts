@@ -1,4 +1,4 @@
-import { exerciseLibrary, type MovementPattern } from "@/lib/exercise-library";
+import { exerciseLibrary, type MovementPattern } from "@/lib/exercises";
 import { createTrainingProgram, type TrainingProgram } from "@/lib/training-programs";
 import type { CalendarAppointment, Client, ClientInvitation, TrainerTask } from "@/lib/demo-data";
 
@@ -66,10 +66,10 @@ function pickVariedExercises(patterns: MovementPattern[], perPattern: number) {
         (exercise) =>
           exercise.pattern === pattern &&
           exercise.level !== "Zaawansowany" &&
-          !usedFamilies.has(exercise.familyId),
+          !usedFamilies.has(exercise.category),
       );
       if (!match) continue;
-      usedFamilies.add(match.familyId);
+      usedFamilies.add(match.category);
       picked.push(match.id);
     }
   }
@@ -151,7 +151,7 @@ export function buildPreviewWorkspace(): PreviewWorkspace {
       category: "Redukcja",
       dayCount: 3,
       clientId: previewClientId,
-      exerciseIds: pickVariedExercises(["squat", "push", "pull", "core", "lunge", "hinge"], 2),
+      exerciseIds: pickVariedExercises(["squat", "horizontal-push", "vertical-pull", "anti-extension", "lunge", "hinge"], 2),
       duration: "12 tyg.",
     }),
     createTrainingProgram({
@@ -160,7 +160,7 @@ export function buildPreviewWorkspace(): PreviewWorkspace {
       category: "Siła",
       dayCount: 4,
       clientId: "demo-client-marek",
-      exerciseIds: pickVariedExercises(["squat", "hinge", "push", "pull", "core"], 3),
+      exerciseIds: pickVariedExercises(["squat", "hinge", "horizontal-push", "horizontal-pull", "anti-extension"], 3),
       duration: "8 tyg.",
     }),
   ];

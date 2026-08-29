@@ -1,6 +1,6 @@
 "use client";
 
-import type { MuscleId } from "@/lib/exercise-library";
+import type { MuscleId } from "@/lib/exercises";
 
 /**
  * Mapa mięśni: uproszczona sylwetka od przodu i od tyłu z podświetleniem

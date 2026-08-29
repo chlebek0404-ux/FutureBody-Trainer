@@ -1,4 +1,4 @@
-import { exerciseLibrary, getExerciseSubstitutions } from "@/lib/exercise-library";
+import { exerciseLibrary, getExerciseSubstitutions } from "@/lib/exercises";
 
 export type ProgramExercise = {
   id: string;

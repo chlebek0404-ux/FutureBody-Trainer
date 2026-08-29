@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, CheckCircle2, ChevronLeft, Dumbbell, Save } from "lucide-react";
 
 import ExerciseMotion from "@/components/exercise-motion";
-import { exerciseLibrary } from "@/lib/exercise-library";
+import { exerciseLibrary } from "@/lib/exercises";
 import type { TrainingDay, TrainingProgram, WorkoutCompletion, WorkoutExerciseResult } from "@/lib/training-programs";
 
 const panelClass = "ui-surface rounded-[24px] border border-black/[0.07] bg-white";
