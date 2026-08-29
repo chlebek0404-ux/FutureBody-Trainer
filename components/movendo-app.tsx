@@ -280,47 +280,20 @@ function LoginScreen({ initialCode = "", onLogin, onRegisterTrainer, onResetPass
   };
 
   return (
-    <main className="futurebody-app relative min-h-[100svh] overflow-hidden bg-[#050505] text-[#f7f7f7]">
-      {/* Tło: dryfujące światło i siatka techniczna. Animowany jest tylko transform. */}
-      <div className="fb-orb fb-orb-a left-[-14rem] top-[-16rem] h-[38rem] w-[38rem] bg-[var(--fb-gold)] opacity-[0.13]" aria-hidden="true" />
-      <div className="fb-orb fb-orb-b right-[-12rem] top-[18rem] h-[32rem] w-[32rem] bg-[#6f8cff] opacity-[0.10]" aria-hidden="true" />
-      <div className="fb-grid-overlay" aria-hidden="true" />
+    <main className="futurebody-app relative flex min-h-[100svh] items-center justify-center overflow-hidden bg-[#050505] px-4 py-[max(2.5rem,env(safe-area-inset-top))] text-[#f7f7f7] sm:px-6">
+      {/* Jedno spokojne światło nad kartą. Bez ruchu i bez dekoracji. */}
+      <div className="pointer-events-none absolute left-1/2 top-[-18rem] h-[30rem] w-[30rem] -translate-x-1/2 rounded-full bg-[var(--fb-gold)] opacity-[0.07] blur-[120px]" aria-hidden="true" />
 
-      <div className="relative mx-auto flex min-h-[100svh] w-full max-w-[1180px] flex-col items-center justify-center gap-10 px-5 py-[max(2.5rem,env(safe-area-inset-top))] lg:flex-row lg:items-center lg:gap-16 lg:px-10">
+      <div className="relative w-full max-w-[420px]">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <img src="/futurebody-logo.png" alt="FutureBody Trainer" className="h-[68px] w-[68px] rounded-[20px] object-cover ring-1 ring-white/10" />
+          <p className="mt-5 text-[13px] font-black tracking-[0.26em]">FUTUREBODY</p>
+          <p className="mt-1.5 text-[9px] uppercase tracking-[0.42em] text-white/30">Trainer</p>
+          <p className="mt-5 text-[12px] text-white/38">Twój trening. Twoi podopieczni. Twój system.</p>
+        </div>
 
-        {/* Panel marki — na dużym ekranie zajmuje lewą kolumnę. */}
-        <section className="w-full max-w-[440px] text-center lg:max-w-none lg:flex-1 lg:text-left">
-          <div className="flex items-center justify-center gap-3.5 lg:justify-start">
-            <img src="/futurebody-logo.png" alt="" aria-hidden="true" className="h-14 w-14 rounded-[18px] object-cover shadow-[0_18px_55px_rgba(255,196,0,.18)] ring-1 ring-white/12" />
-            <span className="text-left">
-              <span className="block text-[13px] font-black tracking-[0.26em]">FUTUREBODY</span>
-              <span className="block text-[9px] uppercase tracking-[0.4em] text-white/32">Trainer</span>
-            </span>
-          </div>
-
-          <h1 className="mt-8 text-[clamp(2.4rem,9vw,4.2rem)] font-black leading-[0.94] tracking-[-0.055em]">
-            <span className="fb-line">Twój trening.</span>
-            <span className="fb-line">Twoi podopieczni.</span>
-            <span className="fb-line text-[var(--fb-gold)]">Twój system.</span>
-          </h1>
-
-          <p className="mx-auto mt-6 max-w-md text-sm leading-6 text-white/45 lg:mx-0">
-            Plany, dieta, kalendarz i postępy w jednym miejscu. Zaprojektowane pod codzienną pracę trenera personalnego, nie pod prezentację.
-          </p>
-
-          <ul className="mx-auto mt-7 grid max-w-md grid-cols-3 gap-2 text-left lg:mx-0 lg:gap-2.5">
-            {[["100", "ćwiczeń w bazie"], ["10", "partii mięśniowych"], ["2", "ścieżki planu"]].map(([value, label]) => (
-              <li key={label} className="fb-glass px-3 py-3 lg:px-4 lg:py-3.5">
-                <span className="block text-xl font-black leading-none tracking-[-0.05em] text-[var(--fb-gold)] lg:text-2xl">{value}</span>
-                <span className="mt-1.5 block text-[9px] leading-3.5 text-white/42 lg:text-[10px] lg:leading-4">{label}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Karta logowania. */}
-        <section className="w-full max-w-[440px] lg:w-[420px] lg:shrink-0">
-        <div className="fb-auth-card rounded-[26px] border border-white/[0.08] bg-[#111214] p-6 shadow-[0_34px_100px_rgba(0,0,0,.5)] sm:p-8">
+        <section>
+        <div className="rounded-[24px] border border-white/[0.07] bg-[#111214] p-6 sm:p-7">
           {mode !== "login" ? (
             <button type="button" onClick={() => changeMode(mode === "client-register" ? "code" : "login")} className="mb-6 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-white/42 hover:text-white">
               <ChevronLeft size={14} /> Wróć
@@ -1375,10 +1348,9 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
     <>
       {/* Hero: dzień, najbliższy trening i akcja główna w jednym kadrze. */}
       <section className="fb-panel relative overflow-hidden p-6 sm:p-8 lg:p-10">
-        <div className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-[var(--fb-gold)] opacity-[0.14] blur-3xl" aria-hidden="true" />
         <div className="relative">
           <p className="fb-label">{dateLabel}</p>
-          <h1 className="fb-display mt-3">{greeting}</h1>
+          <h1 className="mt-3 text-[clamp(1.9rem,6vw,2.6rem)] font-black leading-[1.02] tracking-[-0.05em]">{greeting}</h1>
           <p className="mt-3 max-w-md text-sm leading-6 text-[var(--fb-text-secondary)]">
             {today.length
               ? `Masz dziś ${today.length} ${today.length === 1 ? "trening" : today.length < 5 ? "treningi" : "treningów"}. Najbliższy zaczyna się o ${String(nextAppointment!.hour).padStart(2, "0")}:00.`
@@ -1387,7 +1359,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
 
           {nextAppointment && nextClient ? (
             <div className="fb-glass mt-7 flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5">
-              <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-[linear-gradient(180deg,var(--fb-gold-highlight),var(--fb-gold))] text-[#0c0c0f]">
+              <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-[var(--fb-gold)] text-[#0c0c0f]">
                 <span className="text-xl font-black leading-none">{String(nextAppointment.hour).padStart(2, "0")}</span>
               </div>
               <div className="min-w-0 flex-1">
@@ -1412,7 +1384,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
       {/* Pasek statystyk — liczby mają nieść ciężar wizualny. */}
       <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         {stats.map((stat) => (
-          <article key={stat.label} className="fb-card fb-rise p-4 sm:p-5">
+          <article key={stat.label} className="fb-card p-4 sm:p-5">
             <p className="fb-label">{stat.label}</p>
             <p className="fb-stat-value mt-2.5">{stat.value}</p>
             {stat.hint ? <p className="mt-1 text-[10px] text-[var(--fb-text-muted)]">{stat.hint}</p> : null}
@@ -1436,7 +1408,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
                 const client = clients.find((person) => person.id === item.clientId);
                 if (!client) return null;
                 return (
-                  <div key={item.id} className="fb-rise flex flex-wrap items-center gap-3 p-4 sm:px-5">
+                  <div key={item.id} className="flex flex-wrap items-center gap-3 p-4 sm:px-5">
                     <span className="w-14 shrink-0">
                       <span className="block text-sm font-black tabular-nums">{String(item.hour).padStart(2, "0")}:00</span>
                       <span className="block text-[9px] text-[var(--fb-text-muted)]">60 min</span>
@@ -1470,7 +1442,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
           ].map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.label} onClick={item.action} className="fb-card fb-card-interactive fb-rise flex items-center gap-4 p-4 text-left">
+              <button key={item.label} onClick={item.action} className="fb-card fb-card-interactive flex items-center gap-4 p-4 text-left">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--fb-border)] bg-[var(--fb-glass-strong)]"><Icon size={18} /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-black">{item.label}</span>

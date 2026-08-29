@@ -168,27 +168,8 @@ select:focus-visible {
   isolation: isolate;
 }
 
-/* Światło otoczenia: dwie miękkie plamy budują głębię pod treścią.
-   `fixed` + `-1` trzyma je za interfejsem i nie kosztuje przy przewijaniu. */
-.futurebody-app::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(60rem 40rem at 82% -8%, rgba(255, 196, 0, 0.09), transparent 62%),
-    radial-gradient(52rem 38rem at -10% 12%, rgba(120, 150, 255, 0.055), transparent 60%);
-}
-
 :root[data-theme="light"] .futurebody-app {
   color-scheme: light;
-}
-
-:root[data-theme="light"] .futurebody-app::before {
-  background:
-    radial-gradient(60rem 40rem at 82% -8%, rgba(255, 196, 0, 0.16), transparent 62%),
-    radial-gradient(52rem 38rem at -10% 12%, rgba(120, 150, 255, 0.08), transparent 60%);
 }
 
 .futurebody-app[class*="bg-[#050505]"] {
@@ -220,7 +201,6 @@ select:focus-visible {
 .futurebody-app .bg-white,
 .futurebody-app :where([class*="bg-[#111214]"], [class*="bg-[#0d0d0d]"], [class*="bg-[#090909]"]) {
   background-color: var(--fb-glass) !important;
-  background-image: linear-gradient(180deg, var(--fb-highlight), transparent 42%);
   color: var(--fb-text) !important;
   border-color: var(--fb-border) !important;
   backdrop-filter: var(--fb-card-blur);
@@ -240,9 +220,8 @@ select:focus-visible {
 /* Element aktywny / wybrany — złoty gradient z poświatą. */
 .futurebody-app .fb-selected {
   border-color: var(--fb-gold-dark) !important;
-  background: linear-gradient(180deg, var(--fb-gold-highlight), var(--fb-gold)) !important;
+  background: var(--fb-gold) !important;
   color: #0c0c0f !important;
-  box-shadow: var(--sh-glow);
 }
 
 .futurebody-app .fb-selected :where([class*="text-white"], [class*="text-black/"]) {
@@ -277,15 +256,13 @@ select:focus-visible {
 /* Główne przyciski akcji: złoto z poświatą i wyraźną reakcją na dotyk. */
 .futurebody-app button.bg-black,
 .futurebody-app a.bg-black {
-  background: linear-gradient(180deg, var(--fb-gold-highlight), var(--fb-gold)) !important;
+  background: var(--fb-gold) !important;
   color: #0c0c0f !important;
-  box-shadow: var(--sh-glow);
 }
 
 .futurebody-app button.bg-black:hover:not(:disabled),
 .futurebody-app a.bg-black:hover {
-  box-shadow: 0 12px 40px color-mix(in srgb, var(--fb-gold) 34%, transparent);
-  filter: brightness(1.04);
+  background: var(--fb-gold-highlight) !important;
 }
 
 .futurebody-app button.bg-black :where([class*="text-white"], [class*="text-black/"]),
@@ -328,7 +305,7 @@ select:focus-visible {
 
 :root[data-theme="light"] .futurebody-app section.bg-black,
 :root[data-theme="light"] .futurebody-app div.bg-black:not(.fb-selected) {
-  background: linear-gradient(160deg, #1d1d22, #121216) !important;
+  background: #16161a !important;
   color: #f2f2f0 !important;
   border-color: rgba(255, 255, 255, 0.09) !important;
 }
@@ -347,7 +324,7 @@ select:focus-visible {
 /* Sekcje na czarnym tle w markupie to panele wyróżnione. */
 .futurebody-app section.bg-black,
 .futurebody-app div.bg-black:not(.fb-selected) {
-  background: linear-gradient(160deg, var(--fb-surface-2), var(--fb-surface-0)) !important;
+  background: var(--fb-surface-0) !important;
   border: 1px solid var(--fb-border);
   color: var(--fb-text) !important;
 }
@@ -356,7 +333,6 @@ select:focus-visible {
 
 .fb-glass {
   background-color: var(--fb-glass);
-  background-image: linear-gradient(180deg, var(--fb-highlight), transparent 45%);
   border: 1px solid var(--fb-border);
   backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.25);
   -webkit-backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.25);
@@ -364,7 +340,7 @@ select:focus-visible {
 }
 
 .fb-panel {
-  background: linear-gradient(160deg, var(--fb-surface-2), var(--fb-surface-0));
+  background: var(--fb-surface-0);
   border: 1px solid var(--fb-border);
   border-radius: var(--r-lg);
   box-shadow: var(--sh-2);
@@ -372,7 +348,6 @@ select:focus-visible {
 
 .fb-card {
   background-color: var(--fb-glass);
-  background-image: linear-gradient(180deg, var(--fb-highlight), transparent 45%);
   border: 1px solid var(--fb-border);
   border-radius: var(--r-lg);
   backdrop-filter: blur(var(--fb-glass-blur)) saturate(1.2);
@@ -427,14 +402,12 @@ select:focus-visible {
 }
 
 .fb-btn-primary {
-  background: linear-gradient(180deg, var(--fb-gold-highlight), var(--fb-gold));
+  background: var(--fb-gold);
   color: #0c0c0f;
-  box-shadow: var(--sh-glow);
 }
 
 .fb-btn-primary:hover:not(:disabled) {
-  filter: brightness(1.05);
-  box-shadow: 0 12px 40px color-mix(in srgb, var(--fb-gold) 34%, transparent);
+  background: var(--fb-gold-highlight);
 }
 
 .fb-btn-ghost {
@@ -678,7 +651,7 @@ select:focus-visible {
 
 .futurebody-app .ui-bar,
 .futurebody-app .ui-progress {
-  background: linear-gradient(180deg, var(--fb-gold-highlight), var(--fb-gold-dark)) !important;
+  background: var(--fb-gold) !important;
 }
 
 .futurebody-app :where([class*="bg-emerald-"]) {
