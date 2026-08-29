@@ -695,6 +695,96 @@ select:focus-visible {
   background: color-mix(in srgb, var(--fb-gold) 11%, transparent) !important;
 }
 
+/* ── Warstwy nakładkowe ────────────────────────────────────────────────
+   Okna, arkusze i panele muszą być nieprzezroczyste. Powierzchnia szklana
+   ma sens na stronie, ale nad inną treścią pozwala jej prześwitywać
+   i tekst staje się nieczytelny. */
+.futurebody-app .ui-sheet,
+.futurebody-app .ui-popover,
+.futurebody-app .ui-dialog,
+.futurebody-app [role="dialog"],
+.futurebody-app .ui-sheet .bg-white,
+.futurebody-app .ui-popover .bg-white,
+.futurebody-app [role="dialog"] .bg-white {
+  background-color: var(--fb-surface-1) !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Wnętrze okna: pola wgłębione o stopień ciemniejsze od tła okna. */
+.futurebody-app .ui-sheet :where([class*="bg-[#f4f4f2]"], [class*="bg-[#f3f3f1]"], [class*="bg-[#f2f2f0]"], [class*="bg-[#f1f1ef]"], [class*="bg-[#f0f0ee]"], [class*="bg-[#f7f7f5]"], [class*="bg-[#f5f5f3]"], [class*="bg-[#efefed]"], [class*="bg-[#e9e9e7]"], [class*="bg-[#ededeb]"], [class*="bg-[#eeeeec]"]),
+.futurebody-app .ui-popover :where([class*="bg-[#f4f4f2]"], [class*="bg-[#f3f3f1]"], [class*="bg-[#f2f2f0]"], [class*="bg-[#f1f1ef]"]),
+.futurebody-app [role="dialog"] :where([class*="bg-[#f4f4f2]"], [class*="bg-[#f3f3f1]"], [class*="bg-[#f2f2f0]"], [class*="bg-[#f1f1ef]"]) {
+  background-color: var(--fb-surface-3) !important;
+}
+
+:root[data-theme="light"] .futurebody-app .ui-sheet,
+:root[data-theme="light"] .futurebody-app .ui-popover,
+:root[data-theme="light"] .futurebody-app [role="dialog"],
+:root[data-theme="light"] .futurebody-app .ui-sheet .bg-white,
+:root[data-theme="light"] .futurebody-app .ui-popover .bg-white,
+:root[data-theme="light"] .futurebody-app [role="dialog"] .bg-white {
+  background-color: #ffffff !important;
+}
+
+:root[data-theme="light"] .futurebody-app .ui-sheet :where([class*="bg-[#f4f4f2]"], [class*="bg-[#f3f3f1]"], [class*="bg-[#f2f2f0]"], [class*="bg-[#f1f1ef]"], [class*="bg-[#f0f0ee]"], [class*="bg-[#f7f7f5]"], [class*="bg-[#f5f5f3]"]) {
+  background-color: #f0f0ed !important;
+}
+
+/* Każdy panel osadzony w nakładce pełnoekranowej — niezależnie od klas,
+   jakich użyto w komponencie. Tło przyciemniające zostaje przezroczyste,
+   sam panel nie. */
+.futurebody-app :where([class*="inset-0"][class*="z-["]) > :where(section, article, form, div:not([class*="absolute"]):not([class*="inset-0"])) {
+  background-color: var(--fb-surface-1) !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:root[data-theme="light"] .futurebody-app :where([class*="inset-0"][class*="z-["]) > :where(section, article, form, div:not([class*="absolute"]):not([class*="inset-0"])) {
+  background-color: #ffffff !important;
+}
+
+/* Karty i pola wewnątrz nakładki. */
+.futurebody-app :where([class*="inset-0"][class*="z-["]) .bg-white {
+  background-color: var(--fb-surface-1) !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+}
+
+:root[data-theme="light"] .futurebody-app :where([class*="inset-0"][class*="z-["]) .bg-white {
+  background-color: #ffffff !important;
+}
+
+/* Panel powiadomień należy do powłoki aplikacji i ma w markupie biały tekst,
+   więc pozostaje ciemny również w jasnym motywie — inaczej treść znika. */
+.futurebody-app .ui-popover,
+:root[data-theme="light"] .futurebody-app .ui-popover {
+  background-color: #16161a !important;
+  color: #f2f2f0 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+:root[data-theme="light"] .futurebody-app .ui-popover :where([class*="text-black/"]) {
+  color: rgba(242, 242, 240, 0.5) !important;
+}
+
+:root[data-theme="light"] .futurebody-app .ui-popover :where([class*="border-black/"], [class*="border-white/"]) {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Listy rozwijane muszą mieć własne, nieprzezroczyste tło. */
+.futurebody-app select {
+  background-color: var(--fb-inset) !important;
+  color: var(--fb-text) !important;
+}
+
+.futurebody-app select option {
+  background-color: var(--fb-surface-1);
+  color: var(--fb-text);
+}
+
 .futurebody-app input,
 .futurebody-app textarea,
 .futurebody-app select {
