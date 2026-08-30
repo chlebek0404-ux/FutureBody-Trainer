@@ -23,6 +23,7 @@ import {
   type NutritionProfile,
   type Sex,
 } from "@/lib/nutrition";
+import { guessSexFromName } from "@/lib/name-sex";
 
 const cardClass = "ui-surface rounded-[24px] border border-black/[0.07] bg-white shadow-[0_12px_38px_rgba(0,0,0,.035)]";
 
@@ -133,8 +134,12 @@ export function NutritionEditor({ client, plan, onBack, onSave, onDelete }: {
   onSave: (plan: NutritionPlan) => void;
   onDelete: (clientId: string) => void;
 }) {
+  // Nowy plan startuje z płcią podpowiedzianą z imienia — trener najczęściej
+  // i tak by ją tam ustawił. Zapisany plan zachowuje swoją wartość: raz podjęta
+  // decyzja trenera nie jest nadpisywana zgadywanką.
   const [draft, setDraft] = useState<NutritionPlan>(() => plan ?? createNutritionPlan(client.id, {
-    sex: "kobieta", age: 30, heightCm: 170, weightKg: 70, activityId: "moderate", goal: "Redukcja",
+    sex: guessSexFromName(client.name) ?? "kobieta",
+    age: 30, heightCm: 170, weightKg: 70, activityId: "moderate", goal: "Redukcja",
   }));
 
   const targets = useMemo(() => calculateTargets(draft.profile), [draft.profile]);
