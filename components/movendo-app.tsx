@@ -20,7 +20,7 @@ import { NutritionEditor, NutritionView } from "@/components/nutrition-plan";
 import { calculateTargets, complianceForDay, sumMeals, todayKey, type MealLog, type NutritionPlan } from "@/lib/nutrition";
 import { ClientWorkout } from "@/components/client-workout";
 import { exerciseLibrary, pluralExercises, searchExercises, suggestExercises } from "@/lib/exercises";
-import { currentWeekKey, findCheckin, checkinScore, type CheckinRecord } from "@/lib/checkins";
+import { checkinConcerns, checkinQuestions, checkinScore, currentWeekKey, findCheckin, formatWeekRange, type CheckinRecord } from "@/lib/checkins";
 import { copyPlanToClient, createPlanFromTemplate, createTemplateFromPlan, templateSummary, type PlanTemplate } from "@/lib/plan-templates";
 import { defaultBookingSettings, type BookingSettings } from "@/lib/booking";
 import { BookingSettingsPanel, ClientBooking } from "@/components/booking";
@@ -1239,6 +1239,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
             />
           ) : currentClient ? (
             <ClientProfile
+              checkins={checkins.filter((entry) => entry.clientId === currentClient.id)}
               client={currentClient}
               invitation={invitations.find((item) => item.clientId === currentClient.id && item.status === "active")}
               onBack={() => navigate("clients")}
@@ -1774,6 +1775,94 @@ function ClientsView({ clients, query, onClient, onAdd }: { clients: Client[]; q
  * w błąd. Tabela pod wykresem podaje wszystkie zapisane liczby, więc odczyt
  * nie zależy wyłącznie od koloru linii.
  */
+/**
+ * Historia check-inów podopiecznego w jednym miejscu.
+ *
+ * Trener widzi ciąg tygodni obok siebie: wynik, kierunek zmiany i te
+ * odpowiedzi, które wymagały rozmowy. Dzięki temu spadek regularności widać
+ * jako trend, a nie jako pojedynczy tydzień.
+ */
+function ClientCheckinHistory({ client, checkins }: { client: Client; checkins: CheckinRecord[] }) {
+  const history = [...checkins].sort((a, b) => b.weekKey.localeCompare(a.weekKey));
+  const scores = history.map((record) => checkinScore(record));
+  const average = scores.length ? Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length) : null;
+
+  return (
+    <section className={`${cardClass} p-5 sm:p-7`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h2 className="font-black">Check-iny tygodniowe</h2>
+          <p className="text-[10px] text-black/36">Sen, stres, głód, regeneracja, energia i realizacja planu</p>
+        </div>
+        {average !== null ? <p className="text-[11px] font-black text-black/45">Średnia: {average}%</p> : null}
+      </div>
+
+      {history.length ? (
+        <>
+          {/* Przebieg wyników: najstarszy tydzień z lewej. */}
+          {history.length > 1 ? (
+            <div className="mt-5 flex h-24 items-end gap-1.5" role="img" aria-label={`Wyniki check-inów: ${[...scores].reverse().join("%, ")}%`}>
+              {[...history].reverse().map((record) => {
+                const score = checkinScore(record);
+                return (
+                  <div key={record.id} className="flex min-w-0 flex-1 flex-col items-center gap-1.5" title={`${formatWeekRange(record.weekKey)}: ${score}%`}>
+                    <div className="flex w-full flex-1 items-end">
+                      <div className="w-full rounded-t bg-[var(--fb-chart-line)]" style={{ height: `${Math.max(4, score)}%` }} />
+                    </div>
+                    <span className="w-full truncate text-center text-[8px] font-black text-black/32">{record.weekKey.slice(8)}.{record.weekKey.slice(5, 7)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div className="mt-5 divide-y divide-black/[0.055]">
+            {history.map((record, index) => {
+              const score = checkinScore(record);
+              const previous = history[index + 1];
+              const delta = previous ? score - checkinScore(previous) : null;
+              const concerns = checkinConcerns(record);
+              return (
+                <div key={record.id} className="py-3.5">
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span className="text-xs font-black">{formatWeekRange(record.weekKey)}</span>
+                    <span className="text-xs font-black tabular-nums">{score}%</span>
+                    {delta === null ? null : (
+                      <span className={`text-[10px] font-black ${delta > 0 ? "text-emerald-700" : delta < 0 ? "text-red-700" : "text-black/32"}`}>
+                        {delta > 0 ? `+${delta}` : delta}
+                      </span>
+                    )}
+                    {record.reviewedAt ? null : <span className="rounded-full bg-[var(--fb-gold)] px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-[#0c0c0f]">Do sprawdzenia</span>}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {checkinQuestions.map((question) => {
+                      const value = record.scores[question.id] ?? 3;
+                      const bad = question.higherIsBetter ? value <= 2 : value >= 4;
+                      return (
+                        <span key={question.id} className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${bad ? "bg-red-50 text-red-800" : "bg-black/[0.055] text-black/50"}`}>
+                          {question.label} {value}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {record.weight ? <p className="mt-1.5 text-[10px] text-black/40">Waga podana przez podopiecznego: {record.weight} kg</p> : null}
+                  {concerns.length ? <p className="mt-1.5 text-[10px] font-bold text-red-800">Do omówienia: {concerns.map((item) => item.label.toLowerCase()).join(", ")}</p> : null}
+                  {record.note ? <p className="mt-1.5 text-[11px] leading-5 text-black/50">„{record.note}”</p> : null}
+                  {record.trainerNote ? <p className="mt-1.5 rounded-xl bg-[#f3f3f1] p-2.5 text-[11px] leading-5 text-black/60"><strong className="font-black">Twoja notatka:</strong> {record.trainerNote}</p> : null}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <p className="mt-5 rounded-2xl border border-dashed border-black/10 px-4 py-10 text-center text-xs text-black/38">
+          {client.name} nie wypełnił jeszcze żadnego check-inu.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function MeasurementProgress({ client, measurements, onAddMeasurement }: { client: Client; measurements: Measurement[]; onAddMeasurement: () => void }) {
   const metrics = availableMetrics(measurements);
   const [metricId, setMetricId] = useState<MetricId | null>(null);
@@ -1875,14 +1964,15 @@ function MeasurementProgress({ client, measurements, onAddMeasurement }: { clien
   );
 }
 
-function ClientProfile({ client, invitation, measurements, onBack, onAction, onCreatePlan, onOpenCalendar, onOpenPlan, onStartWorkout, onNewInvitation, onCopy, notify }: { client: Client; invitation?: ClientInvitation; measurements: Measurement[]; onBack: () => void; onAction: (type: ModalType) => void; onCreatePlan: () => void; onOpenCalendar: () => void; onOpenPlan: () => void; onStartWorkout: () => void; onNewInvitation: () => void; onCopy: (value: string, label: string) => void; notify: (text: string) => void }) {
-  const [tab, setTab] = useState<"overview" | "plan" | "history" | "progress" | "notes">("overview");
+function ClientProfile({ client, invitation, measurements, checkins, onBack, onAction, onCreatePlan, onOpenCalendar, onOpenPlan, onStartWorkout, onNewInvitation, onCopy, notify }: { client: Client; invitation?: ClientInvitation; measurements: Measurement[]; checkins: CheckinRecord[]; onBack: () => void; onAction: (type: ModalType) => void; onCreatePlan: () => void; onOpenCalendar: () => void; onOpenPlan: () => void; onStartWorkout: () => void; onNewInvitation: () => void; onCopy: (value: string, label: string) => void; notify: (text: string) => void }) {
+  const [tab, setTab] = useState<"overview" | "plan" | "history" | "progress" | "checkins" | "notes">("overview");
   const [note, setNote] = useState("");
   const profileTabs = [
     ["overview", "Przegląd"],
     ["plan", "Plan"],
     ["history", "Historia"],
     ["progress", "Postępy"],
+    ["checkins", "Check-iny"],
     ["notes", "Notatki"],
   ] as const;
 
@@ -1899,6 +1989,8 @@ function ClientProfile({ client, invitation, measurements, onBack, onAction, onC
     {tab === "history" ? <section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] p-5"><h2 className="font-black">Historia treningów</h2><p className="text-[10px] text-black/36">Ostatnie zapisane aktywności podopiecznego</p></div>{["Ostatni trening", "Tydzień temu", "Dwa tygodnie temu"].map((date, index) => <div key={date} className="flex min-h-16 items-center gap-3 border-b border-black/[0.055] px-5 py-3 last:border-0"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><CheckCircle2 size={15}/></span><span className="min-w-0 flex-1"><span className="block text-xs font-black">{client.plan}</span><span className="block text-[9px] text-black/36">{date} · {index === 0 ? "Trening zapisany" : "Zrealizowany"}</span></span><ChevronRight size={14}/></div>)}</section> : null}
 
     {tab === "progress" ? <MeasurementProgress client={client} measurements={measurements} onAddMeasurement={() => onAction("measurement")} /> : null}
+
+    {tab === "checkins" ? <ClientCheckinHistory client={client} checkins={checkins} /> : null}
 
     {tab === "notes" ? <section className={`${cardClass} p-5 sm:p-7`}><h2 className="font-black">Notatki trenera</h2><p className="mt-1 text-[10px] text-black/36">Prywatne informacje dotyczące współpracy i kolejnych kroków.</p><textarea value={note} onChange={(event) => setNote(event.target.value)} className="mt-5 min-h-40 w-full rounded-2xl bg-[#f3f3f1] p-4 text-sm outline-none" placeholder="Dodaj obserwacje, ustalenia lub plan działania…"/><button onClick={() => notify("Notatka podopiecznego została zapisana")} disabled={!note.trim()} className="mt-4 h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white disabled:opacity-35">Zapisz notatkę</button></section> : null}
   </>;
