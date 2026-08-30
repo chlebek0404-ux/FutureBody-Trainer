@@ -78,7 +78,7 @@ function Avatar({ initials, size = "md", dark = false }: { initials: string; siz
 
 function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "dark" | "good" | "warn" | "bad" }) {
   const tones = {
-    neutral: "bg-black/[0.055] text-black/52",
+    neutral: "bg-[var(--fb-inset)] text-[var(--fb-text-secondary)]",
     dark: "bg-black text-white",
     good: "bg-emerald-50 text-emerald-700",
     warn: "bg-amber-50 text-amber-700",
@@ -1168,12 +1168,12 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
       <aside className={`fb-dark-surface fixed inset-y-0 left-0 z-50 w-[268px] flex-col border-r border-white/[0.07] bg-[#0b0b0d] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] text-white transition-transform duration-300 ${focusedFlow ? "hidden" : "flex lg:translate-x-0"} ${mobileMenu ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex items-center gap-3 px-2 pb-6">
           <img src="/futurebody-logo.png" alt="FutureBody Trainer" className="h-11 w-11 rounded-[14px] object-cover ring-1 ring-white/15" />
-          <div className="min-w-0"><p className="truncate text-[13px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.38em] text-white/32">Trainer</p></div>
+          <div className="min-w-0"><p className="truncate text-[13px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.38em] text-white/50">Trainer</p></div>
           <button className="ml-auto grid h-11 w-11 place-items-center text-white/60 lg:hidden" onClick={() => setMobileMenu(false)} aria-label="Zamknij menu"><X size={20} /></button>
         </div>
         <div className="flex-1 overflow-y-auto pr-1 [scrollbar-width:none]">
           <div className="mb-4">
-            <p className="mb-2 px-3 text-[9px] font-black uppercase tracking-[0.2em] text-white/25">Główne</p>
+            <p className="mb-2 px-3 text-[9px] font-black uppercase tracking-[0.2em] text-white/45">Główne</p>
             <nav className="space-y-0.5">
               {primaryNavigation.map((item) => {
                 const Icon = item.icon;
@@ -1217,7 +1217,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
             <div className="relative"><button onClick={() => { setNotificationsOpen((current) => !current); setSearchFocused(false); }} aria-expanded={notificationsOpen} className="relative grid h-11 w-11 place-items-center rounded-[14px] border border-white/[0.07] bg-[#111214]" aria-label="Powiadomienia"><Bell size={17} />{trainerNotifications.some((item) => !item.read) ? <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#ffc400] ring-2 ring-[#111214]" /> : null}</button></div>
           </div>
           <div className="relative hidden w-full max-w-[430px] sm:block">
-            <div className="flex items-center gap-2.5 rounded-[16px] border border-white/[0.07] bg-[#111214] px-4 py-2.5"><Search size={16} className="text-white/30" /><input ref={searchInputRef} value={query} onFocus={() => setSearchFocused(true)} onChange={(event) => { setQuery(event.target.value); setSearchFocused(true); }} placeholder="Szukaj podopiecznego, planu, zadania…" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/28" /><span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/30">Ctrl K</span></div>
+            <label className="flex min-h-11 cursor-text items-center gap-2.5 rounded-[16px] border border-white/[0.07] bg-[#111214] px-4 py-2.5"><Search size={16} className="text-white/45" /><input ref={searchInputRef} value={query} onFocus={() => setSearchFocused(true)} onChange={(event) => { setQuery(event.target.value); setSearchFocused(true); }} placeholder="Szukaj podopiecznego, planu, zadania…" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/45" /><span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/50">Ctrl K</span></label>
             {searchFocused && query.trim() ? <div className="ui-popover absolute left-0 right-0 top-[52px] z-50 overflow-hidden rounded-[22px] border border-black/10 bg-white p-2 shadow-2xl"><p className="px-3 py-2 text-[8px] font-black uppercase tracking-wider text-black/30">Wyniki wyszukiwania</p>{searchResults.length ? searchResults.map((result) => { const Icon = result.icon; return <button key={result.id} onMouseDown={(event) => event.preventDefault()} onClick={() => openSearchResult(result)} className="flex w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-[#f3f3f1]"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><Icon size={14} /></span><span className="min-w-0"><span className="block truncate text-xs font-black">{result.title}</span><span className="block truncate text-[9px] text-black/38">{result.detail}</span></span></button>; }) : <div className="px-3 py-6 text-center text-xs text-black/38">Brak wyników. Spróbuj innego hasła.</div>}</div> : null}
           </div>
           <div className="ml-3 hidden lg:block"><div className="relative"><button onClick={() => { setNotificationsOpen((current) => !current); setSearchFocused(false); }} aria-expanded={notificationsOpen} className="relative grid h-11 w-11 place-items-center rounded-[14px] border border-white/[0.07] bg-[#111214]" aria-label="Powiadomienia"><Bell size={17} />{trainerNotifications.some((item) => !item.read) ? <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#ffc400] ring-2 ring-[#111214]" /> : null}</button></div></div>
@@ -1546,7 +1546,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, worko
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <p className="fb-label">{dateLabel}</p>
             <span className="h-1 w-1 rounded-full bg-[var(--fb-text-muted)]" aria-hidden="true" />
-            <p className="fb-label tabular-nums text-[var(--fb-gold)]">{clock}</p>
+            <p className="fb-label tabular-nums text-[var(--fb-gold-ink)]">{clock}</p>
           </div>
           <h1 className="mt-3 text-[clamp(1.9rem,6vw,2.6rem)] font-black leading-[1.02] tracking-[-0.05em]">{greeting}</h1>
           <p className="mt-3 max-w-md text-sm leading-6 text-[var(--fb-text-secondary)]">
@@ -1612,7 +1612,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, worko
               className={`flex min-h-[68px] flex-col items-center justify-center gap-1 rounded-2xl border p-1 transition ${day.isToday ? "border-[var(--fb-gold)] bg-[color-mix(in_srgb,var(--fb-gold)_12%,transparent)]" : "border-[var(--fb-border)] hover:bg-[var(--fb-inset)]"} ${day.isPast && !day.isToday ? "opacity-45" : ""}`}
             >
               <span className="text-[9px] font-black uppercase tracking-wider text-[var(--fb-text-muted)]">{day.label}</span>
-              <span className={`text-sm font-black tabular-nums ${day.isToday ? "text-[var(--fb-gold)]" : ""}`}>{day.dayNumber}</span>
+              <span className={`text-sm font-black tabular-nums ${day.isToday ? "text-[var(--fb-gold-ink)]" : ""}`}>{day.dayNumber}</span>
               <span className="flex h-2 items-center gap-0.5">
                 {Array.from({ length: Math.min(day.count, 4) }, (_, index) => (
                   <span key={index} className={`h-1.5 w-1.5 rounded-full ${day.isToday ? "bg-[var(--fb-gold)]" : "bg-[var(--fb-text-muted)]"}`} />
@@ -1716,7 +1716,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, worko
                 </button>
               ))}
               {attention.length > 6 ? (
-                <button onClick={() => onNavigate("clients")} className="w-full p-4 text-center text-[10px] font-black uppercase tracking-wider text-[var(--fb-gold)]">
+                <button onClick={() => onNavigate("clients")} className="w-full p-4 text-center text-[10px] font-black uppercase tracking-wider text-[var(--fb-gold-ink)]">
                   Pokaż wszystkich podopiecznych ({attention.length - 6} więcej)
                 </button>
               ) : null}
@@ -3022,7 +3022,7 @@ function ReportsView({ clients, appointments, workoutHistory }: { clients: Clien
 
   return <>
     <PageHeader title="Raport tygodniowy" subtitle="Regularność, frekwencja i praca z podopiecznymi w wybranym tygodniu." secondary={<div className="flex flex-wrap items-center gap-2"><div className="flex h-11 items-center rounded-full border border-black/10 bg-white"><button onClick={() => setWeekOffset((current) => current - 1)} className="grid h-full w-10 place-items-center" aria-label="Poprzedni tydzień"><ChevronLeft size={14}/></button><button onClick={() => setWeekOffset(0)} className="h-full border-x border-black/8 px-4 text-[9px] font-black uppercase">Bieżący tydzień</button><button onClick={() => setWeekOffset((current) => current + 1)} className="grid h-full w-10 place-items-center" aria-label="Następny tydzień"><ChevronRight size={14}/></button></div></div>}/>
-    <div className="mb-4 flex items-center justify-between rounded-2xl bg-black px-5 py-4 text-white"><div><p className="text-[8px] font-black uppercase tracking-wider text-white/35">Zakres raportu</p><p className="mt-1 text-sm font-black">{weekLabel}</p></div><Badge>{weekOffset === 0 ? "Aktualny" : weekOffset < 0 ? "Historia" : "Plan"}</Badge></div>
+    <div className="fb-dark-surface mb-4 flex items-center justify-between rounded-2xl bg-black px-5 py-4 text-white"><div><p className="text-[8px] font-black uppercase tracking-wider text-white/35">Zakres raportu</p><p className="mt-1 text-sm font-black">{weekLabel}</p></div><Badge>{weekOffset === 0 ? "Aktualny" : weekOffset < 0 ? "Historia" : "Plan"}</Badge></div>
     <div className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]">
       <section className={`${cardClass} p-6`}><div className="flex items-center justify-between"><div><h2 className="font-black">Treningi w kalendarzu</h2><p className="text-[10px] text-black/34">{weekAppointments.length} zaplanowanych spotkań</p></div><Badge tone="good">{weeklyCompleted.length} wykonanych</Badge></div><div className="mt-8 flex h-64 items-end gap-3">{dailySessions.map((value, index) => <div key={index} className="flex flex-1 flex-col items-center gap-2"><div className="relative h-full w-full rounded-t-lg bg-black/[0.05]"><div className="ui-bar absolute inset-x-0 bottom-0 rounded-t-lg bg-black" style={{ height: `${Math.max(5, value / maxSessions * 100)}%`, opacity: .35 + index * .08 }}/></div><span className="text-[8px] text-black/28">{["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"][index]}</span><strong className="text-[9px]">{value}</strong></div>)}</div></section>
       <section className="space-y-4"><div className="grid grid-cols-2 gap-3">{[["Regularność", "91%", TrendingUp], ["Frekwencja", "92%", CheckCircle2], ["Aktywni", String(clients.filter((client) => client.status === "Aktywny").length), Users], ["Zapisane wyniki", String(weeklyCompleted.length), Dumbbell]].map(([label, value, Icon]) => <div key={String(label)} className={`${cardClass} p-4`}><Icon size={17}/><p className="mt-5 text-2xl font-black tracking-[-0.05em]">{value as string}</p><p className="mt-1 text-[9px] uppercase tracking-wider text-black/32">{label as string}</p></div>)}</div><div className="rounded-[24px] bg-black p-5 text-white"><p className="text-[9px] uppercase tracking-wider text-white/35">Wniosek tygodnia</p><h3 className="mt-2 text-xl font-black">Regularność rośnie</h3><p className="mt-1 text-[10px] leading-5 text-white/42">Najlepszy wynik utrzymuje grupa realizująca trzy jednostki tygodniowo.</p></div></section>
@@ -3187,7 +3187,7 @@ function ClientPortal({
     { id: "profile", label: "Profil", icon: Users },
   ];
   if (!program) {
-    return <div className="futurebody-app futurebody-app-enter min-h-[100svh] bg-[#050505] text-[#f7f7f7]"><header className="fb-dark-surface flex h-[72px] items-center border-b border-white/[0.07] px-4 text-white"><img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover"/><div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">{previewMode ? "Tryb podglądu" : "Panel podopiecznego"}</p></div><button onClick={onLogout} className="ml-auto grid h-11 w-11 place-items-center rounded-full border border-white/10" aria-label="Wyloguj"><LogOut size={15}/></button></header><main className="grid min-h-[calc(100svh-72px)] place-items-center px-5 py-10"><section className={`${cardClass} w-full max-w-lg p-7 text-center sm:p-10`}><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-black text-white"><Dumbbell size={22}/></span><h1 className="mt-6 text-2xl font-black tracking-[-0.04em]">Plan jest w przygotowaniu</h1><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-black/42">Twój trener nie przypisał jeszcze aktywnego programu. Gdy plan będzie gotowy, pojawi się tutaj automatycznie.</p><button onClick={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} className="mt-6 h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase text-white">Napisz do trenera</button></section></main></div>;
+    return <div className="futurebody-app futurebody-app-enter min-h-[100svh] bg-[#050505] text-[#f7f7f7]"><header className="fb-dark-surface flex h-[72px] items-center border-b border-white/[0.07] px-4 text-white"><img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover"/><div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/50">{previewMode ? "Tryb podglądu" : "Panel podopiecznego"}</p></div><button onClick={onLogout} className="ml-auto grid h-11 w-11 place-items-center rounded-full border border-white/10" aria-label="Wyloguj"><LogOut size={15}/></button></header><main className="grid min-h-[calc(100svh-72px)] place-items-center px-5 py-10"><section className={`${cardClass} w-full max-w-lg p-7 text-center sm:p-10`}><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-black text-white"><Dumbbell size={22}/></span><h1 className="mt-6 text-2xl font-black tracking-[-0.04em]">Plan jest w przygotowaniu</h1><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-black/42">Twój trener nie przypisał jeszcze aktywnego programu. Gdy plan będzie gotowy, pojawi się tutaj automatycznie.</p><button onClick={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} className="mt-6 h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase text-white">Napisz do trenera</button></section></main></div>;
   }
   const activeWorkoutDay = program.trainingDays.find((day) => day.id === activeWorkoutDayId);
   const todayDay = program.trainingDays[0];
@@ -3202,8 +3202,8 @@ function ClientPortal({
       <header className="fb-dark-surface sticky top-0 z-30 border-b border-white/[0.07] bg-[#050505]/92 pt-[env(safe-area-inset-top)] text-white">
         <div className="mx-auto flex h-[70px] max-w-6xl items-center px-4 sm:px-7">
           <img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover" />
-          <div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">Panel podopiecznego</p></div>
-          <nav className="mx-auto hidden items-center gap-1 md:flex">{tabs.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => { setTab(item.id); setActiveWorkoutDayId(null); }} className={`flex min-h-11 items-center gap-2 rounded-full px-4 text-[10px] font-black transition ${tab === item.id ? "bg-[color-mix(in_srgb,var(--fb-gold)_14%,transparent)] text-[var(--fb-gold)]" : "text-[var(--fb-text-muted)] hover:text-[var(--fb-text)]"}`}><Icon size={14} />{item.label}</button>; })}</nav>
+          <div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/50">Panel podopiecznego</p></div>
+          <nav className="mx-auto hidden items-center gap-1 md:flex">{tabs.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => { setTab(item.id); setActiveWorkoutDayId(null); }} className={`flex min-h-11 items-center gap-2 rounded-full px-4 text-[10px] font-black transition ${tab === item.id ? "bg-[color-mix(in_srgb,var(--fb-gold)_14%,transparent)] text-[var(--fb-gold-ink)]" : "text-[var(--fb-text-muted)] hover:text-[var(--fb-text)]"}`}><Icon size={14} />{item.label}</button>; })}</nav>
           <button onClick={onLogout} className="ml-auto grid h-11 w-11 place-items-center rounded-full border border-black/10 bg-white" aria-label="Wyloguj"><LogOut size={15} /></button>
         </div>
       </header>

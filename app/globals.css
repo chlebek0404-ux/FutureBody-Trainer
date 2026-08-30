@@ -30,6 +30,9 @@
   --fb-gold-highlight: #ffd21a;
   --fb-gold-dark: #d99f00;
   --fb-chart-line: var(--fb-gold);
+  /* Złoto jako kolor tekstu. Na ciemnym tle czyste, na jasnym przyciemnione —
+     #ffc400 na bieli daje 1,7:1 i jest nieczytelne. */
+  --fb-gold-ink: var(--fb-gold);
   --fb-glow: rgba(255, 196, 0, 0.22);
 
   --fb-text: #f2f2f0;
@@ -94,6 +97,7 @@
      Ciemniejszy stopień daje 2,3:1, a czytelność dopełniają podpis wartości
      i tabela pod wykresem. */
   --fb-chart-line: #b58400;
+  --fb-gold-ink: #8a6400;
   --fb-success: #167a45;
   --fb-warning: #9a5c00;
   --fb-error: #b4232f;
@@ -195,6 +199,10 @@ select:focus-visible {
   background-color: var(--fb-surface-0) !important;
   color: var(--fb-text) !important;
   color-scheme: dark;
+  /* Powierzchnia jest ciemna niezależnie od motywu, więc wnętrze dostaje
+     wartości wyliczone dla ciemnego tła. Reguła dla jasnego motywu niżej
+     nadpisuje je konkretnymi kolorami. */
+  --fb-inset: rgba(255, 255, 255, 0.06);
 }
 
 .futurebody-app .fb-dark-surface[class*="bg-[#050505]"] {
@@ -290,6 +298,20 @@ select:focus-visible {
   color: #f2f2f0 !important;
   border-color: rgba(255, 255, 255, 0.09) !important;
   color-scheme: dark;
+
+  /* Pasek boczny i dolna nawigacja zostają ciemne także w jasnym motywie,
+     więc ich zawartość musi używać tuszu przeznaczonego na ciemne tło.
+     Bez tego pozycje menu dostawały #55555c na #16161a — 2,4:1, czyli
+     tekst praktycznie niewidoczny. */
+  --fb-text: #f2f2f0;
+  --fb-text-secondary: #b3b3ae;
+  --fb-text-muted: #8a8a84;
+  --fb-glass: rgba(255, 255, 255, 0.07);
+  --fb-glass-strong: rgba(255, 255, 255, 0.12);
+  --fb-border: rgba(255, 255, 255, 0.1);
+  --fb-border-strong: rgba(255, 255, 255, 0.2);
+  --fb-inset: rgba(255, 255, 255, 0.06);
+  --fb-gold-ink: var(--fb-gold);
 }
 
 :root[data-theme="light"] .futurebody-app .fb-dark-surface[class*="bg-[#050505]"] {

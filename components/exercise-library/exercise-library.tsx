@@ -139,7 +139,7 @@ export default function ExerciseLibrary({ onAddToPlan }: { onAddToPlan?: (exerci
         <div className="fb-scroll-x -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
           {quickFilters.map((item) => (
             <button key={item.id} onClick={() => setQuick(item.id)} aria-pressed={quick === item.id}
-              className={`h-10 shrink-0 rounded-full border px-3.5 text-[11px] font-bold transition ${quick === item.id ? "border-[var(--fb-gold)] bg-[color-mix(in_srgb,var(--fb-gold)_13%,transparent)] text-[var(--fb-gold)]" : "border-black/10 bg-white"}`}>
+              className={`h-10 shrink-0 rounded-full border px-3.5 text-[11px] font-bold transition ${quick === item.id ? "border-[var(--fb-gold)] bg-[color-mix(in_srgb,var(--fb-gold)_13%,transparent)] text-[var(--fb-gold-ink)]" : "border-black/10 bg-white"}`}>
               {item.label}
             </button>
           ))}
@@ -165,7 +165,7 @@ export default function ExerciseLibrary({ onAddToPlan }: { onAddToPlan?: (exerci
         <div className="flex items-center justify-between border-b border-[var(--fb-border)] px-4 py-3 sm:px-5">
           <p className="text-[11px] font-bold text-[var(--fb-text-muted)]">{results.length} {pluralExercises(results.length)}</p>
           {activeFilters ? (
-            <button onClick={() => { setPickedLevels([]); setPickedEquipment([]); setPickedGoals([]); }} className="text-[10px] font-black uppercase tracking-wider text-[var(--fb-gold)]">Wyczyść filtry</button>
+            <button onClick={() => { setPickedLevels([]); setPickedEquipment([]); setPickedGoals([]); }} className="text-[10px] font-black uppercase tracking-wider text-[var(--fb-gold-ink)]">Wyczyść filtry</button>
           ) : null}
         </div>
 
