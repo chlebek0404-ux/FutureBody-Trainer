@@ -646,6 +646,15 @@ select:focus-visible {
   transition: background-color var(--motion-base) var(--motion-ease-soft), border-color var(--motion-base) var(--motion-ease-soft);
 }
 
+/* Sam przełącznik ma 30 px wysokości, bo tak wygląda dobrze. Niewidoczna
+   nakładka podnosi pole dotyku do wymaganych 44 px, nie ruszając rysunku. */
+.fb-switch::before {
+  content: "";
+  position: absolute;
+  inset: -7px -2px;
+  border-radius: 999px;
+}
+
 .fb-switch::after {
   content: "";
   position: absolute;

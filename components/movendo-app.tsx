@@ -22,6 +22,8 @@ import { ClientWorkout } from "@/components/client-workout";
 import { exerciseLibrary, pluralExercises, searchExercises, suggestExercises } from "@/lib/exercises";
 import { currentWeekKey, findCheckin, checkinScore, type CheckinRecord } from "@/lib/checkins";
 import { copyPlanToClient, createPlanFromTemplate, createTemplateFromPlan, templateSummary, type PlanTemplate } from "@/lib/plan-templates";
+import { defaultBookingSettings, type BookingSettings } from "@/lib/booking";
+import { BookingSettingsPanel, ClientBooking } from "@/components/booking";
 import { availableMetrics, formatValue, metricDefinitions, metricSeries, metricSummary, plural, readMetric as readMetricValue, type MetricId } from "@/lib/measurements";
 import MeasurementChart from "@/components/measurement-chart";
 import { createTrainingDays, createTrainingDaysFromPlan, createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
@@ -456,6 +458,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const [measurements, setMeasurements] = useState<Measurement[]>(() => readStoredJson("futurebody_measurements", []));
   const [checkins, setCheckins] = useState<CheckinRecord[]>(() => readStoredJson("futurebody_checkins", []));
   const [planTemplates, setPlanTemplates] = useState<PlanTemplate[]>(() => readStoredJson("futurebody_plan_templates", []));
+  const [bookingSettings, setBookingSettings] = useState<BookingSettings>(() => readStoredJson("futurebody_booking", defaultBookingSettings));
   const [planIntentClientId, setPlanIntentClientId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
@@ -640,6 +643,15 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.localStorage.setItem("movendo_calendar_history", JSON.stringify(appointments));
   }, [appointments]);
 
+  /** Zapis podopiecznego na wolny termin. Sprawdzamy zajętość jeszcze raz,
+   *  bo między wyświetleniem listy a kliknięciem godzina mogła zostać zajęta. */
+  function bookAppointment(clientId: string, date: string, hour: number) {
+    const taken = appointments.some((item) => item.date === date && item.hour === hour && item.status !== "Anulowany");
+    if (taken) { notify("Ten termin został właśnie zajęty. Wybierz inny."); return; }
+    setAppointments((current) => [...current, { id: `apt-${Date.now()}`, clientId, date, hour, kind: "Trening personalny", status: "Zaplanowany" }]);
+    notify(`Zapisano na ${String(hour).padStart(2, "0")}:00.`);
+  }
+
   /** Zapis planu jako szablon do wielokrotnego użycia. */
   function saveTemplate(plan: TrainingProgram, name: string, note: string) {
     setPlanTemplates((current) => [createTemplateFromPlan(plan, name, note), ...current]);
@@ -698,7 +710,8 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.localStorage.setItem("futurebody_measurements", JSON.stringify(measurements));
     window.localStorage.setItem("futurebody_checkins", JSON.stringify(checkins));
     window.localStorage.setItem("futurebody_plan_templates", JSON.stringify(planTemplates));
-  }, [checkins, planTemplates, clients, invitations, mealLogs, measurements, nutritionPlans, tasks, workoutHistory, workoutPlans]);
+    window.localStorage.setItem("futurebody_booking", JSON.stringify(bookingSettings));
+  }, [bookingSettings, checkins, planTemplates, clients, invitations, mealLogs, measurements, nutritionPlans, tasks, workoutHistory, workoutPlans]);
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -1145,7 +1158,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
 
   if (booting) return <FutureBodySplash/>;
   if (!role) return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} onGoogleSignIn={signInWithGoogle} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
-  if (role === "client" && clientSession) return <ClientPortal checkins={checkins} onSubmitCheckin={submitCheckin} client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} previewMode={previewMode} dietPlan={nutritionPlans.find((plan) => plan.clientId === clientSession.id)} mealLog={mealLogs.find((log) => log.clientId === clientSession.id && log.date === todayKey())} onToggleMeal={(mealId) => toggleMeal(clientSession.id, mealId)} />;
+  if (role === "client" && clientSession) return <ClientPortal checkins={checkins} onSubmitCheckin={submitCheckin} booking={bookingSettings} appointments={appointments} now={now} onBook={(date, hour) => bookAppointment(clientSession.id, date, hour)} onCancelBooking={cancelAppointment} client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} previewMode={previewMode} dietPlan={nutritionPlans.find((plan) => plan.clientId === clientSession.id)} mealLog={mealLogs.find((log) => log.clientId === clientSession.id && log.date === todayKey())} onToggleMeal={(mealId) => toggleMeal(clientSession.id, mealId)} />;
   if (role === "client") return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} onGoogleSignIn={signInWithGoogle} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
 
   return (
@@ -1240,7 +1253,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
               notify={notify}
             />
           ) : (
-            <ViewRenderer view={activeView} planTemplates={planTemplates} onSaveTemplate={saveTemplate} onDeleteTemplate={deleteTemplate} onAssignTemplate={assignTemplate} onCopyPlan={copyPlan} checkins={checkins} onReviewCheckin={reviewCheckin} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} now={now} onAddWorkout={openScheduling} calendarIntent={calendarIntent} planIntentClientId={planIntentClientId} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={(type) => setModal({ type })} notify={notify} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
+            <ViewRenderer view={activeView} booking={bookingSettings} onBookingChange={setBookingSettings} planTemplates={planTemplates} onSaveTemplate={saveTemplate} onDeleteTemplate={deleteTemplate} onAssignTemplate={assignTemplate} onCopyPlan={copyPlan} checkins={checkins} onReviewCheckin={reviewCheckin} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} now={now} onAddWorkout={openScheduling} calendarIntent={calendarIntent} planIntentClientId={planIntentClientId} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={(type) => setModal({ type })} notify={notify} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
           )}
           </div>
         </main>
@@ -1318,6 +1331,7 @@ function ViewRenderer(props: {
   onCancelAppointment: (id: string) => void; onDeleteAppointment: (id: string) => void;
   workoutPlans: TrainingProgram[]; onSavePlan: (plan: TrainingProgram, clientId: string) => void; onUpdatePlan: (plan: TrainingProgram) => void;
   workoutHistory: WorkoutCompletion[]; checkins: CheckinRecord[]; onReviewCheckin: (id: string, note: string) => void;
+  booking: BookingSettings; onBookingChange: (next: BookingSettings) => void;
   planTemplates: PlanTemplate[]; onSaveTemplate: (plan: TrainingProgram, name: string, note: string) => void; onDeleteTemplate: (id: string) => void; onAssignTemplate: (template: PlanTemplate, clientId: string) => void; onCopyPlan: (plan: TrainingProgram, clientId: string) => void; onEnablePhoneNotifications: () => Promise<boolean>;
   themePreference: ThemePreference; onThemeChange: (theme: ThemePreference) => void;
   profile: TrainerProfile; onProfileChange: (profile: TrainerProfile) => void;
@@ -1339,7 +1353,7 @@ function ViewRenderer(props: {
     case "automations": return <AutomationsView notify={props.notify} />;
     case "materials": return <MaterialsView notify={props.notify} />;
     case "reports": return <ReportsView clients={props.clients} appointments={props.appointments} workoutHistory={props.workoutHistory} />;
-    case "settings": return <SettingsView notify={props.notify} onEnablePhoneNotifications={props.onEnablePhoneNotifications} themePreference={props.themePreference} onThemeChange={props.onThemeChange} profile={props.profile} onProfileChange={props.onProfileChange} />;
+    case "settings": return <SettingsView booking={props.booking} onBookingChange={props.onBookingChange} notify={props.notify} onEnablePhoneNotifications={props.onEnablePhoneNotifications} themePreference={props.themePreference} onThemeChange={props.onThemeChange} profile={props.profile} onProfileChange={props.onProfileChange} />;
   }
 }
 
@@ -2925,7 +2939,7 @@ function ReportsView({ clients, appointments, workoutHistory }: { clients: Clien
   </>;
 }
 
-function SettingsView({ notify, onEnablePhoneNotifications, themePreference, onThemeChange, profile, onProfileChange }: { notify: (text: string) => void; onEnablePhoneNotifications: () => Promise<boolean>; themePreference: ThemePreference; onThemeChange: (theme: ThemePreference) => void; profile: TrainerProfile; onProfileChange: (profile: TrainerProfile) => void }) {
+function SettingsView({ notify, onEnablePhoneNotifications, themePreference, onThemeChange, profile, onProfileChange, booking, onBookingChange }: { booking: BookingSettings; onBookingChange: (next: BookingSettings) => void; notify: (text: string) => void; onEnablePhoneNotifications: () => Promise<boolean>; themePreference: ThemePreference; onThemeChange: (theme: ThemePreference) => void; profile: TrainerProfile; onProfileChange: (profile: TrainerProfile) => void }) {
   const [toggles, setToggles] = useState([true, true, true, true]);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [phoneStatus, setPhoneStatus] = useState<"unknown" | "active" | "unavailable">("unknown");
@@ -2967,7 +2981,9 @@ function SettingsView({ notify, onEnablePhoneNotifications, themePreference, onT
   }
 
   return <>
-    <PageHeader title="Ustawienia" subtitle="Dopasuj konto, powiadomienia i bezpieczeństwo."/>
+    <PageHeader title="Ustawienia" subtitle="Dopasuj konto, rezerwację, powiadomienia i bezpieczeństwo."/>
+
+    <div className="mb-4"><BookingSettingsPanel settings={booking} onChange={onBookingChange} /></div>
     <div className="grid gap-4 xl:grid-cols-[1fr_.65fr]">
       <section className={`${cardClass} overflow-hidden`}>
         <div className="border-b border-black/[0.06] p-5 sm:p-6">
@@ -3040,6 +3056,11 @@ function ClientPortal({
   onToggleMeal,
   checkins,
   onSubmitCheckin,
+  booking,
+  appointments,
+  onBook,
+  onCancelBooking,
+  now,
 }: {
   client: Client;
   program?: TrainingProgram;
@@ -3053,6 +3074,11 @@ function ClientPortal({
   onToggleMeal: (mealId: string) => void;
   checkins: CheckinRecord[];
   onSubmitCheckin: (record: CheckinRecord) => void;
+  booking: BookingSettings;
+  appointments: CalendarAppointment[];
+  onBook: (date: string, hour: number) => void;
+  onCancelBooking: (id: string) => void;
+  now: Date;
 }) {
   const [tab, setTab] = useState<"today" | "plan" | "diet" | "progress" | "profile">("today");
   const [activeWorkoutDayId, setActiveWorkoutDayId] = useState<string | null>(null);
@@ -3096,16 +3122,17 @@ function ClientPortal({
         ) : tab === "today" ? (
           <>
             <div className="mb-7"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/34">Twój dzień z FutureBody</p><h1 className="mt-2 text-4xl font-black tracking-[-0.055em]">Cześć, {client.name.split(" ")[0]}.</h1><p className="mt-2 text-sm text-black/40">Plan, trening i postępy masz zawsze w jednym miejscu.</p></div>
-            <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
-              <section className="rounded-[26px] bg-black p-6 text-white sm:p-8">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              <section className="min-w-0 rounded-[26px] bg-black p-6 text-white sm:p-8">
                 <div className="flex items-start justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/38">Najbliższy trening</p><h2 className="mt-3 text-3xl font-black tracking-[-0.05em]">{todayDay?.name ?? "Plan w przygotowaniu"}</h2><p className="mt-2 text-xs text-white/42">{todayDay ? `${todayDay.focus} · ${todayDay.items.length} ćwiczeń` : "Trener przygotowuje Twój program"}</p></div><Dumbbell size={24} /></div>
                 <div className="mt-10 space-y-3">{todayDay?.items.slice(0, 3).map((item, index) => { const exercise = exerciseLibrary.find((candidate) => candidate.id === item.exerciseId) ?? exerciseLibrary[0]; return <div key={item.id} className="flex items-center gap-3 border-t border-white/10 pt-3"><span className="grid h-7 w-7 place-items-center rounded-full bg-white text-[9px] font-black text-black">{index + 1}</span><span className="flex-1 text-xs font-bold">{exercise.name}</span><span className="text-[10px] text-white/42">{item.sets} × {item.reps}</span></div>; })}</div>
                 <button disabled={!todayDay} onClick={() => todayDay && openWorkout(todayDay.id)} className="mt-8 h-12 w-full rounded-[16px] bg-[#ffc400] text-[10px] font-black uppercase tracking-[0.1em] text-[#050505] disabled:opacity-35">Rozpocznij trening</button>
               </section>
-              <div className="space-y-4">
+              <div className="min-w-0 space-y-4">
                 <section className={`${cardClass} p-5`}><div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/32">Najbliższe spotkanie</p><h3 className="mt-1 font-black">{client.nextSession}</h3></div><CalendarDays size={20} /></div><p className="mt-4 text-xs text-black/42">Termin jest zsynchronizowany z kalendarzem trenera.</p></section>
                 <section className={`${cardClass} p-5`}><div className="flex justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/32">Ukończone treningi</p><p className="mt-2 text-2xl font-black">{completedWorkouts}</p></div><CheckCircle2 size={20} /></div><p className="mt-3 text-[10px] text-black/38">Każdy zapisany trening aktualizuje Twoją historię.</p></section>
                 <CheckinForm clientId={client.id} existing={findCheckin(checkins, client.id, currentWeekKey())} onSubmit={onSubmitCheckin} />
+                <ClientBooking settings={booking} appointments={appointments} myAppointments={appointments.filter((item) => item.clientId === client.id)} now={now} onBook={onBook} onCancel={onCancelBooking} />
               </div>
             </div>
           </>
