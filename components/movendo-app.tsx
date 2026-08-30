@@ -22,6 +22,7 @@ import { ClientWorkout } from "@/components/client-workout";
 import { exerciseLibrary, pluralExercises, searchExercises, suggestExercises } from "@/lib/exercises";
 import { checkinConcerns, checkinQuestions, checkinScore, currentWeekKey, findCheckin, formatWeekRange, type CheckinRecord } from "@/lib/checkins";
 import { copyPlanToClient, createPlanFromTemplate, createTemplateFromPlan, templateSummary, type PlanTemplate } from "@/lib/plan-templates";
+import { attendance as attendanceFor, calendarDaysBetween, lastActivityLabel, nextSessionLabel, planForClient, planLabel, weeklyRealisation } from "@/lib/client-metrics";
 import { defaultBookingSettings, type BookingSettings } from "@/lib/booking";
 import { BookingSettingsPanel, ClientBooking } from "@/components/booking";
 import { availableMetrics, formatValue, metricDefinitions, metricSeries, metricSummary, plural, readMetric as readMetricValue, type MetricId } from "@/lib/measurements";
@@ -785,7 +786,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     }
     setMeasurements((current) => [{ id: `m${Date.now()}`, clientId, date, measuredAt: now.toISOString(), weight, bodyFat, note: (payload.note ?? "").trim(), circumferences }, ...current]);
     setClients((current) => current.map((client) => client.id === clientId
-      ? { ...client, weight: weight ? `${weight} kg` : client.weight, bodyFat: bodyFat ? `${bodyFat}%` : client.bodyFat, lastCheckin: `Pomiar ${date}` }
+      ? { ...client, weight: weight ? `${weight} kg` : client.weight, bodyFat: bodyFat ? `${bodyFat}%` : client.bodyFat }
       : client));
     notify("Pomiar zapisany");
   }
@@ -934,7 +935,19 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
       setInvitations([]);
       setWorkoutHistory([]);
       setTrainerNotifications([]);
+      // Dane trybu podglądu nie mogą przetrwać wylogowania — inaczej pomiary,
+      // check-iny i szablony z recenzji interfejsu zostają w kolejnej sesji.
+      setMeasurements([]);
+      setCheckins([]);
+      setPlanTemplates([]);
+      setNutritionPlans([]);
+      setMealLogs([]);
+      setBookingSettings(defaultBookingSettings);
     }
+    // Ulubione i ostatnio oglądane ćwiczenia należą do konta, więc nie mogą
+    // zostać na urządzeniu po wylogowaniu.
+    window.localStorage.removeItem("futurebody_exercise_favourites");
+    window.localStorage.removeItem("futurebody_exercise_recents");
     setRole(null);
     setClientSession(null);
     setActiveView("dashboard");
@@ -1065,8 +1078,18 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
       };
       return [...current.filter((item) => item.id !== appointment.id && !(item.date === input.date && item.hour === input.hour)), appointment];
     });
-    setClients((current) => current.map((client) => client.id === input.clientId ? { ...client, nextSession: `${formatCalendarDate(input.date)}, ${String(input.hour).padStart(2, "0")}:00` } : client));
+    // Najbliższy termin nie jest zapisywany na karcie podopiecznego — wynika
+    // z listy terminów, więc odwołanie od razu go stamtąd usuwa.
     const client = clients.find((item) => item.id === input.clientId);
+    // Zajęta godzina zostaje nadpisana, więc trener musi wiedzieć, czyj termin
+    // właśnie zniknął — inaczej zapis podopiecznego przepada po cichu.
+    const replaced = appointments.find((item) =>
+      item.date === input.date && item.hour === input.hour && item.id !== input.id && item.clientId !== input.clientId && item.status !== "Anulowany");
+    if (replaced) {
+      const previous = clients.find((item) => item.id === replaced.clientId);
+      notify(`Ta godzina była zajęta przez: ${previous?.name ?? "innego podopiecznego"}. Poprzedni termin został zastąpiony.`);
+      return;
+    }
     notify(`Trening z ${client?.name ?? "podopiecznym"} zapisany`);
   }
 
@@ -1094,8 +1117,15 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
 
   function completeWorkout(completion: WorkoutCompletion) {
     setWorkoutHistory((current) => [completion, ...current]);
-    setClients((current) => current.map((client) => client.id === completion.clientId ? { ...client, progress: Math.min(100, client.progress + 4), lastCheckin: "Trening zapisany teraz" } : client));
-    if (clientSession?.id === completion.clientId) setClientSession((current) => current ? ({ ...current, progress: Math.min(100, current.progress + 4), lastCheckin: "Trening zapisany teraz" }) : current);
+    // Termin z tego dnia przestaje być „zaplanowany”: trening się odbył
+    // i został zapisany, więc kalendarz musi to pokazywać.
+    const day = completion.completedAt.slice(0, 10);
+    setAppointments((current) => current.map((item) =>
+      item.clientId === completion.clientId && item.date === day && item.status !== "Anulowany"
+        ? { ...item, status: "Wykonany" as const }
+        : item));
+    // Postęp nie jest tu doliczany: wynika z historii treningów i planu,
+    // więc każde jego „podbicie” byłoby liczbą bez pokrycia w danych.
     notify("Trening zapisany. Wyniki są widoczne dla trenera.");
   }
 
@@ -1158,7 +1188,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
 
   if (booting) return <FutureBodySplash/>;
   if (!role) return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} onGoogleSignIn={signInWithGoogle} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
-  if (role === "client" && clientSession) return <ClientPortal checkins={checkins} onSubmitCheckin={submitCheckin} booking={bookingSettings} appointments={appointments} now={now} onBook={(date, hour) => bookAppointment(clientSession.id, date, hour)} onCancelBooking={cancelAppointment} client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} previewMode={previewMode} dietPlan={nutritionPlans.find((plan) => plan.clientId === clientSession.id)} mealLog={mealLogs.find((log) => log.clientId === clientSession.id && log.date === todayKey())} onToggleMeal={(mealId) => toggleMeal(clientSession.id, mealId)} />;
+  if (role === "client" && clientSession) return <ClientPortal checkins={checkins} onSubmitCheckin={submitCheckin} booking={bookingSettings} appointments={appointments} history={workoutHistory.filter((entry) => entry.clientId === clientSession.id)} now={now} onBook={(date, hour) => bookAppointment(clientSession.id, date, hour)} onCancelBooking={cancelAppointment} client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} previewMode={previewMode} dietPlan={nutritionPlans.find((plan) => plan.clientId === clientSession.id)} mealLog={mealLogs.find((log) => log.clientId === clientSession.id && log.date === todayKey())} onToggleMeal={(mealId) => toggleMeal(clientSession.id, mealId)} />;
   if (role === "client") return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} onGoogleSignIn={signInWithGoogle} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
 
   return (
@@ -1240,6 +1270,10 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
           ) : currentClient ? (
             <ClientProfile
               checkins={checkins.filter((entry) => entry.clientId === currentClient.id)}
+              plans={workoutPlans}
+              appointments={appointments}
+              history={workoutHistory}
+              now={now}
               client={currentClient}
               invitation={invitations.find((item) => item.clientId === currentClient.id && item.status === "active")}
               onBack={() => navigate("clients")}
@@ -1341,8 +1375,8 @@ function ViewRenderer(props: {
   onSaveNutrition: (plan: NutritionPlan) => void; onDeleteNutrition: (clientId: string) => void;
 }) {
   switch (props.view) {
-    case "dashboard": return <Dashboard now={props.now} checkins={props.checkins} clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} workoutHistory={props.workoutHistory} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
-    case "clients": return <ClientsView clients={props.clients} query={props.query} onClient={props.onClient} onAdd={() => props.onModal("client")} />;
+    case "dashboard": return <Dashboard now={props.now} workoutPlans={props.workoutPlans} checkins={props.checkins} clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} workoutHistory={props.workoutHistory} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
+    case "clients": return <ClientsView plans={props.workoutPlans} appointments={props.appointments} history={props.workoutHistory} now={props.now} clients={props.clients} query={props.query} onClient={props.onClient} onAdd={() => props.onModal("client")} />;
     case "calendar": return <CalendarView clients={props.clients} appointments={props.appointments} onSchedule={props.onSchedule} onOpenClient={props.onClient} onStartWorkout={props.onStartWorkout} onCancel={props.onCancelAppointment} onDelete={props.onDeleteAppointment} autoSchedule={props.calendarIntent} />;
     case "plans": return <PlansView planTemplates={props.planTemplates} onSaveTemplate={props.onSaveTemplate} onDeleteTemplate={props.onDeleteTemplate} onAssignTemplate={props.onAssignTemplate} onCopyPlan={props.onCopyPlan} clients={props.clients} workoutPlans={props.workoutPlans} initialPlanId={props.selectedPlanId} onOpenDetail={props.onOpenPlan} onCloseDetail={() => props.onNavigate("plans")} onSavePlan={props.onSavePlan} onUpdatePlan={props.onUpdatePlan} notify={props.notify} planIntentClientId={props.planIntentClientId} />;
     case "exercises": return <ExercisesView />;
@@ -1358,11 +1392,12 @@ function ViewRenderer(props: {
   }
 }
 
-function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, workoutHistory, checkins, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { now: Date; clients: Client[]; appointments: CalendarAppointment[]; nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; workoutHistory: WorkoutCompletion[]; checkins: CheckinRecord[]; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
+function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, workoutHistory, workoutPlans, checkins, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { now: Date; clients: Client[]; appointments: CalendarAppointment[]; nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; workoutHistory: WorkoutCompletion[]; workoutPlans: TrainingProgram[]; checkins: CheckinRecord[]; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
   const today = appointments.filter((item) => item.date === dateKey(now)).sort((a, b) => a.hour - b.hour);
   const nextAppointment = today.find((item) => item.hour >= now.getHours()) ?? today[0];
   const nextClient = nextAppointment ? clients.find((client) => client.id === nextAppointment.clientId) ?? null : null;
-  const clientsWithoutPlan = clients.filter((client) => client.plan === "Brak planu");
+  // Brak planu wynika z listy planów, nie z napisu zapisanego na karcie podopiecznego.
+  const clientsWithoutPlan = clients.filter((client) => !planForClient(client.id, workoutPlans));
   const clientsWithoutDiet = clients.filter((client) => !nutritionPlans.some((plan) => plan.clientId === client.id));
   const clientsWithDiet = clients.filter((client) => nutritionPlans.some((plan) => plan.clientId === client.id));
   const dietComplianceToday = clientsWithDiet.length
@@ -1443,7 +1478,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, worko
 
     // Cisza dłuższa niż tydzień przy aktywnej współpracy.
     if (client.status === "Aktywny" && lastEntry) {
-      const days = Math.floor((now.getTime() - new Date(lastEntry.completedAt).getTime()) / 86_400_000);
+      const days = calendarDaysBetween(new Date(lastEntry.completedAt), now);
       if (days >= 7) {
         attention.push({
           id: `idle-${client.id}`,
@@ -1757,13 +1792,13 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, worko
     </>
   );
 }
-function ClientsView({ clients, query, onClient, onAdd }: { clients: Client[]; query: string; onClient: (id: string) => void; onAdd: () => void }) {
+function ClientsView({ clients, query, onClient, onAdd, plans, appointments, history, now }: { clients: Client[]; query: string; onClient: (id: string) => void; onAdd: () => void; plans: TrainingProgram[]; appointments: CalendarAppointment[]; history: WorkoutCompletion[]; now: Date }) {
   const [statusFilter, setStatusFilter] = useState<ClientStatus | "Wszyscy">("Wszyscy");
   const statuses: (ClientStatus | "Wszyscy")[] = ["Wszyscy", "Aktywny", "Do kontaktu", "Wstrzymany"];
   const filtered = clients
     .filter((client) => statusFilter === "Wszyscy" || client.status === statusFilter)
     .filter((client) => `${client.name} ${client.goal} ${client.tags.join(" ")}`.toLowerCase().includes(query.toLowerCase()));
-  return <><PageHeader title="Podopieczni" subtitle={`${clients.filter((c) => c.status === "Aktywny").length} aktywnych · ${clients.length} wszystkich profili`} action="Dodaj podopiecznego" onAction={onAdd} secondary={<div className="flex flex-wrap items-center gap-2"><Filter size={14} className="text-black/32" aria-hidden="true" />{statuses.map((status) => <button key={status} onClick={() => setStatusFilter(status)} aria-pressed={statusFilter === status} className={`h-11 rounded-full border px-4 text-[11px] font-black transition ${statusFilter === status ? "border-black bg-black text-white" : "border-black/10 bg-white"}`}>{status}{status !== "Wszyscy" ? ` · ${clients.filter((client) => client.status === status).length}` : ""}</button>)}</div>} /><div className={`${cardClass} overflow-hidden`}><div className="hidden grid-cols-[1.25fr_1.25fr_.8fr_.6fr_32px] gap-4 border-b border-black/[0.06] px-6 py-3 text-[9px] font-black uppercase tracking-[0.12em] text-black/32 md:grid"><span>Podopieczny</span><span>Cel i plan</span><span>Następny trening</span><span>Realizacja</span><span /></div>{filtered.length === 0 ? <div className="px-6 py-12 text-center"><Filter size={22} className="mx-auto text-black/25"/><p className="mt-3 text-sm font-black">Brak podopiecznych dla tego filtru</p><p className="mt-1 text-[11px] text-black/38">Zmień status albo wyczyść wyszukiwanie.</p></div> : null}{filtered.map((client) => <button key={client.id} onClick={() => onClient(client.id)} className="grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-black/[0.055] px-4 py-4 text-left last:border-0 hover:bg-black/[0.015] md:grid-cols-[1.25fr_1.25fr_.8fr_.6fr_32px] md:px-6"><div className="flex min-w-0 items-center gap-3"><Avatar initials={client.initials} dark={client.status === "Aktywny"} /><div className="min-w-0"><p className="truncate text-sm font-bold">{client.name}</p><div className="mt-1"><Badge tone={client.status === "Aktywny" ? "good" : client.status === "Do kontaktu" ? "warn" : "neutral"}>{client.status}</Badge></div></div></div><div className="hidden min-w-0 md:block"><p className="truncate text-xs font-bold">{client.goal}</p><p className="truncate text-[10px] text-black/36">{client.plan}</p></div><div className="hidden md:block"><p className="text-xs font-bold">{client.nextSession}</p></div><div className="hidden md:block"><p className="mb-2 text-xs font-black">{client.progress}%</p><ProgressBar value={client.progress} /></div><ChevronRight size={16} className="text-black/28" /></button>)}</div></>;
+  return <><PageHeader title="Podopieczni" subtitle={`${clients.filter((c) => c.status === "Aktywny").length} aktywnych · ${clients.length} wszystkich profili`} action="Dodaj podopiecznego" onAction={onAdd} secondary={<div className="flex flex-wrap items-center gap-2"><Filter size={14} className="text-black/32" aria-hidden="true" />{statuses.map((status) => <button key={status} onClick={() => setStatusFilter(status)} aria-pressed={statusFilter === status} className={`h-11 rounded-full border px-4 text-[11px] font-black transition ${statusFilter === status ? "border-black bg-black text-white" : "border-black/10 bg-white"}`}>{status}{status !== "Wszyscy" ? ` · ${clients.filter((client) => client.status === status).length}` : ""}</button>)}</div>} /><div className={`${cardClass} overflow-hidden`}><div className="hidden grid-cols-[1.25fr_1.25fr_.8fr_.6fr_32px] gap-4 border-b border-black/[0.06] px-6 py-3 text-[9px] font-black uppercase tracking-[0.12em] text-black/32 md:grid"><span>Podopieczny</span><span>Cel i plan</span><span>Następny trening</span><span>Realizacja</span><span /></div>{filtered.length === 0 ? <div className="px-6 py-12 text-center"><Filter size={22} className="mx-auto text-black/25"/><p className="mt-3 text-sm font-black">Brak podopiecznych dla tego filtru</p><p className="mt-1 text-[11px] text-black/38">Zmień status albo wyczyść wyszukiwanie.</p></div> : null}{filtered.map((client) => <button key={client.id} onClick={() => onClient(client.id)} className="grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-black/[0.055] px-4 py-4 text-left last:border-0 hover:bg-black/[0.015] md:grid-cols-[1.25fr_1.25fr_.8fr_.6fr_32px] md:px-6"><div className="flex min-w-0 items-center gap-3"><Avatar initials={client.initials} dark={client.status === "Aktywny"} /><div className="min-w-0"><p className="truncate text-sm font-bold">{client.name}</p><div className="mt-1"><Badge tone={client.status === "Aktywny" ? "good" : client.status === "Do kontaktu" ? "warn" : "neutral"}>{client.status}</Badge></div></div></div><div className="hidden min-w-0 md:block"><p className="truncate text-xs font-bold">{client.goal}</p><p className="truncate text-[10px] text-black/36">{planLabel(client.id, plans)}</p></div><div className="hidden md:block"><p className="text-xs font-bold">{nextSessionLabel(client.id, appointments, now)}</p></div><div className="hidden md:block">{(() => { const realisation = weeklyRealisation(client.id, plans, history, now); return realisation ? <><p className="mb-2 text-xs font-black">{realisation.done} z {realisation.planned}</p><ProgressBar value={realisation.percent} /></> : <p className="mb-2 text-xs font-black text-black/28">Brak planu</p>; })()}</div><ChevronRight size={16} className="text-black/28" /></button>)}</div></>;
 }
 
 
@@ -1964,9 +1999,16 @@ function MeasurementProgress({ client, measurements, onAddMeasurement }: { clien
   );
 }
 
-function ClientProfile({ client, invitation, measurements, checkins, onBack, onAction, onCreatePlan, onOpenCalendar, onOpenPlan, onStartWorkout, onNewInvitation, onCopy, notify }: { client: Client; invitation?: ClientInvitation; measurements: Measurement[]; checkins: CheckinRecord[]; onBack: () => void; onAction: (type: ModalType) => void; onCreatePlan: () => void; onOpenCalendar: () => void; onOpenPlan: () => void; onStartWorkout: () => void; onNewInvitation: () => void; onCopy: (value: string, label: string) => void; notify: (text: string) => void }) {
+function ClientProfile({ client, invitation, measurements, checkins, plans, appointments, history, now, onBack, onAction, onCreatePlan, onOpenCalendar, onOpenPlan, onStartWorkout, onNewInvitation, onCopy, notify }: { client: Client; invitation?: ClientInvitation; measurements: Measurement[]; checkins: CheckinRecord[]; plans: TrainingProgram[]; appointments: CalendarAppointment[]; history: WorkoutCompletion[]; now: Date; onBack: () => void; onAction: (type: ModalType) => void; onCreatePlan: () => void; onOpenCalendar: () => void; onOpenPlan: () => void; onStartWorkout: () => void; onNewInvitation: () => void; onCopy: (value: string, label: string) => void; notify: (text: string) => void }) {
   const [tab, setTab] = useState<"overview" | "plan" | "history" | "progress" | "checkins" | "notes">("overview");
   const [note, setNote] = useState("");
+  const activePlan = planForClient(client.id, plans);
+  const realisation = weeklyRealisation(client.id, plans, history, now);
+  const attendanceStats = attendanceFor(client.id, appointments, history, now);
+  // Pole „Ostatni check-in” pokazywało wcześniej datę pomiaru albo napis
+  // „Trening zapisany teraz”. Teraz bierze się z faktycznych check-inów.
+  const latestCheckin = [...checkins].sort((a, b) => b.weekKey.localeCompare(a.weekKey))[0];
+  const lastCheckinLabel = latestCheckin ? `${formatWeekRange(latestCheckin.weekKey)} · ${checkinScore(latestCheckin)}%` : "Brak";
   const profileTabs = [
     ["overview", "Przegląd"],
     ["plan", "Plan"],
@@ -1982,11 +2024,11 @@ function ClientProfile({ client, invitation, measurements, checkins, onBack, onA
 
     <nav className="mb-5 flex gap-1 overflow-x-auto rounded-2xl bg-[#eeeeec] p-1 [scrollbar-width:none]" aria-label="Sekcje profilu podopiecznego">{profileTabs.map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`fb-segment ${tab === id ? "fb-segment-active" : ""}`}>{label}</button>)}</nav>
 
-    {tab === "overview" ? <div className="grid gap-4 xl:grid-cols-[1.25fr_.75fr]"><div className="space-y-4"><section className="fb-dark-surface rounded-[26px] bg-[#0b0b0d] p-6 text-white sm:p-7"><div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/35">Aktywny plan</p><h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">{client.plan}</h2><p className="mt-2 text-xs text-white/42">Cel: {client.goal}</p></div><div className="flex gap-2"><button onClick={onOpenPlan} className="h-11 rounded-full border border-white/15 px-5 text-[9px] font-black uppercase">Otwórz plan</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-[#ffc400] px-5 text-[9px] font-black uppercase text-[#050505]">Start</button></div></div><div className="mt-6"><div className="mb-2 flex justify-between text-[9px]"><span className="text-white/38">Realizacja programu</span><strong>{client.progress}%</strong></div><div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#ffc400]" style={{ width: `${client.progress}%` }}/></div></div></section><section className={`${cardClass} p-5 sm:p-6`}><div className="flex items-center justify-between"><div><h2 className="font-black">Najważniejsze dane</h2><p className="text-[10px] text-black/36">Jedno źródło informacji o współpracy</p></div><button onClick={() => onAction("measurement")} className="h-10 rounded-full border border-black/10 px-4 text-[9px] font-black uppercase">Dodaj pomiar</button></div><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Następny trening", client.nextSession], ["Masa", client.weight], ["Tkanka tłuszczowa", client.bodyFat], ["Frekwencja", client.attendance]].map(([label, value]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase tracking-wider text-black/30">{label}</p><p className="mt-2 text-sm font-black">{value}</p></div>)}</div></section></div><aside className="space-y-4"><section className={`${cardClass} p-5`}><h2 className="font-black">Profil współpracy</h2><dl className="mt-4 space-y-4">{[["Cel", client.goal], ["Dołączył", client.joined], ["Ostatni check-in", client.lastCheckin], ["Telefon", client.phone || "Brak"]].map(([label, value]) => <div key={label}><dt className="text-[8px] font-black uppercase tracking-wider text-black/30">{label}</dt><dd className="mt-1 text-xs font-bold">{value}</dd></div>)}</dl><div className="mt-5 flex flex-wrap gap-1.5">{client.tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</div></section><InvitationCard invitation={invitation} clientName={client.name} onNew={onNewInvitation} onCopy={onCopy}/></aside></div> : null}
+    {tab === "overview" ? <div className="grid gap-4 xl:grid-cols-[1.25fr_.75fr]"><div className="space-y-4"><section className="fb-dark-surface rounded-[26px] bg-[#0b0b0d] p-6 text-white sm:p-7"><div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/35">Aktywny plan</p><h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">{planLabel(client.id, plans)}</h2><p className="mt-2 text-xs text-white/42">Cel: {client.goal}</p></div><div className="flex gap-2"><button onClick={onOpenPlan} className="h-11 rounded-full border border-white/15 px-5 text-[9px] font-black uppercase">Otwórz plan</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-[#ffc400] px-5 text-[9px] font-black uppercase text-[#050505]">Start</button></div></div><div className="mt-6"><div className="mb-2 flex justify-between text-[9px]"><span className="text-white/38">Realizacja w tym tygodniu</span><strong>{realisation ? `${realisation.done} z ${realisation.planned}` : "Brak planu"}</strong></div><div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#ffc400]" style={{ width: `${realisation?.percent ?? 0}%` }}/></div></div></section><section className={`${cardClass} p-5 sm:p-6`}><div className="flex items-center justify-between"><div><h2 className="font-black">Najważniejsze dane</h2><p className="text-[10px] text-black/36">Jedno źródło informacji o współpracy</p></div><button onClick={() => onAction("measurement")} className="h-10 rounded-full border border-black/10 px-4 text-[9px] font-black uppercase">Dodaj pomiar</button></div><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Następny trening", nextSessionLabel(client.id, appointments, now)], ["Masa", client.weight], ["Tkanka tłuszczowa", client.bodyFat], ["Frekwencja", attendanceStats ? `${attendanceStats.attended} z ${attendanceStats.total}` : "—"]].map(([label, value]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase tracking-wider text-black/30">{label}</p><p className="mt-2 text-sm font-black">{value}</p></div>)}</div></section></div><aside className="space-y-4"><section className={`${cardClass} p-5`}><h2 className="font-black">Profil współpracy</h2><dl className="mt-4 space-y-4">{[["Cel", client.goal], ["Dołączył", client.joined], ["Ostatni check-in", lastCheckinLabel], ["Ostatni trening", lastActivityLabel(client.id, history, now)], ["Telefon", client.phone || "Brak"]].map(([label, value]) => <div key={label}><dt className="text-[8px] font-black uppercase tracking-wider text-black/30">{label}</dt><dd className="mt-1 text-xs font-bold">{value}</dd></div>)}</dl><div className="mt-5 flex flex-wrap gap-1.5">{client.tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</div></section><InvitationCard invitation={invitation} clientName={client.name} onNew={onNewInvitation} onCopy={onCopy}/></aside></div> : null}
 
-    {tab === "plan" ? <section className={`${cardClass} p-5 sm:p-7`}><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/30">Aktualny program</p><h2 className="mt-2 text-2xl font-black">{client.plan}</h2><p className="mt-1 text-xs text-black/40">{client.goal} · realizacja {client.progress}%</p></div><div className="flex flex-wrap gap-2"><button onClick={onCreatePlan} className="h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">{client.plan === "Brak planu" ? "Utwórz plan" : "Nowy plan"}</button><button onClick={onOpenPlan} className="h-11 rounded-full border border-black/10 px-5 text-[9px] font-black uppercase">Edytuj plan</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">Rozpocznij trening</button></div></div><div className="mt-6"><ProgressBar value={client.progress}/></div></section> : null}
+    {tab === "plan" ? <section className={`${cardClass} p-5 sm:p-7`}><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/30">Aktualny program</p><h2 className="mt-2 text-2xl font-black">{planLabel(client.id, plans)}</h2><p className="mt-1 text-xs text-black/40">{client.goal}{realisation ? ` · w tym tygodniu ${realisation.done} z ${realisation.planned}` : ""}</p></div><div className="flex flex-wrap gap-2"><button onClick={onCreatePlan} className="h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">{activePlan ? "Nowy plan" : "Utwórz plan"}</button><button onClick={onOpenPlan} className="h-11 rounded-full border border-black/10 px-5 text-[9px] font-black uppercase">Edytuj plan</button><button onClick={onStartWorkout} className="h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white">Rozpocznij trening</button></div></div><div className="mt-6"><ProgressBar value={client.progress}/></div></section> : null}
 
-    {tab === "history" ? <section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] p-5"><h2 className="font-black">Historia treningów</h2><p className="text-[10px] text-black/36">Ostatnie zapisane aktywności podopiecznego</p></div>{["Ostatni trening", "Tydzień temu", "Dwa tygodnie temu"].map((date, index) => <div key={date} className="flex min-h-16 items-center gap-3 border-b border-black/[0.055] px-5 py-3 last:border-0"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><CheckCircle2 size={15}/></span><span className="min-w-0 flex-1"><span className="block text-xs font-black">{client.plan}</span><span className="block text-[9px] text-black/36">{date} · {index === 0 ? "Trening zapisany" : "Zrealizowany"}</span></span><ChevronRight size={14}/></div>)}</section> : null}
+    {tab === "history" ? <section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] p-5"><h2 className="font-black">Historia treningów</h2><p className="text-[10px] text-black/36">Ostatnie zapisane aktywności podopiecznego</p></div>{["Ostatni trening", "Tydzień temu", "Dwa tygodnie temu"].map((date, index) => <div key={date} className="flex min-h-16 items-center gap-3 border-b border-black/[0.055] px-5 py-3 last:border-0"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><CheckCircle2 size={15}/></span><span className="min-w-0 flex-1"><span className="block text-xs font-black">{planLabel(client.id, plans)}</span><span className="block text-[9px] text-black/36">{date} · {index === 0 ? "Trening zapisany" : "Zrealizowany"}</span></span><ChevronRight size={14}/></div>)}</section> : null}
 
     {tab === "progress" ? <MeasurementProgress client={client} measurements={measurements} onAddMeasurement={() => onAction("measurement")} /> : null}
 
@@ -3027,7 +3069,7 @@ function ReportsView({ clients, appointments, workoutHistory }: { clients: Clien
       <section className={`${cardClass} p-6`}><div className="flex items-center justify-between"><div><h2 className="font-black">Treningi w kalendarzu</h2><p className="text-[10px] text-black/34">{weekAppointments.length} zaplanowanych spotkań</p></div><Badge tone="good">{weeklyCompleted.length} wykonanych</Badge></div><div className="mt-8 flex h-64 items-end gap-3">{dailySessions.map((value, index) => <div key={index} className="flex flex-1 flex-col items-center gap-2"><div className="relative h-full w-full rounded-t-lg bg-black/[0.05]"><div className="ui-bar absolute inset-x-0 bottom-0 rounded-t-lg bg-black" style={{ height: `${Math.max(5, value / maxSessions * 100)}%`, opacity: .35 + index * .08 }}/></div><span className="text-[8px] text-black/28">{["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"][index]}</span><strong className="text-[9px]">{value}</strong></div>)}</div></section>
       <section className="space-y-4"><div className="grid grid-cols-2 gap-3">{[["Regularność", "91%", TrendingUp], ["Frekwencja", "92%", CheckCircle2], ["Aktywni", String(clients.filter((client) => client.status === "Aktywny").length), Users], ["Zapisane wyniki", String(weeklyCompleted.length), Dumbbell]].map(([label, value, Icon]) => <div key={String(label)} className={`${cardClass} p-4`}><Icon size={17}/><p className="mt-5 text-2xl font-black tracking-[-0.05em]">{value as string}</p><p className="mt-1 text-[9px] uppercase tracking-wider text-black/32">{label as string}</p></div>)}</div><div className="rounded-[24px] bg-black p-5 text-white"><p className="text-[9px] uppercase tracking-wider text-white/35">Wniosek tygodnia</p><h3 className="mt-2 text-xl font-black">Regularność rośnie</h3><p className="mt-1 text-[10px] leading-5 text-white/42">Najlepszy wynik utrzymuje grupa realizująca trzy jednostki tygodniowo.</p></div></section>
     </div>
-    <section className={`${cardClass} mt-4 overflow-hidden`}><div className="border-b border-black/[0.06] px-5 py-4"><h2 className="font-black">Podopieczni w raporcie</h2><p className="text-[10px] text-black/35">Szybki przegląd realizacji i kolejnych działań</p></div><div className="grid gap-px bg-black/[0.05] md:grid-cols-2 xl:grid-cols-3">{clients.slice(0, 6).map((client) => <div key={client.id} className="bg-white p-4"><div className="flex items-center gap-3"><Avatar initials={client.initials} dark/><div className="min-w-0"><p className="truncate text-xs font-black">{client.name}</p><p className="truncate text-[9px] text-black/36">{client.plan}</p></div><strong className="ml-auto text-sm">{client.progress}%</strong></div><div className="mt-4"><ProgressBar value={client.progress}/></div></div>)}</div></section>
+    <section className={`${cardClass} mt-4 overflow-hidden`}><div className="border-b border-black/[0.06] px-5 py-4"><h2 className="font-black">Podopieczni w raporcie</h2><p className="text-[10px] text-black/35">Szybki przegląd realizacji i kolejnych działań</p></div><div className="grid gap-px bg-black/[0.05] md:grid-cols-2 xl:grid-cols-3">{clients.slice(0, 6).map((client) => <div key={client.id} className="bg-white p-4"><div className="flex items-center gap-3"><Avatar initials={client.initials} dark/><div className="min-w-0"><p className="truncate text-xs font-black">{client.name}</p><p className="truncate text-[9px] text-black/36">{client.goal}</p></div><strong className="ml-auto text-sm">{client.progress}%</strong></div><div className="mt-4"><ProgressBar value={client.progress}/></div></div>)}</div></section>
   </>;
 }
 
@@ -3150,6 +3192,7 @@ function ClientPortal({
   onSubmitCheckin,
   booking,
   appointments,
+  history,
   onBook,
   onCancelBooking,
   now,
@@ -3168,12 +3211,14 @@ function ClientPortal({
   onSubmitCheckin: (record: CheckinRecord) => void;
   booking: BookingSettings;
   appointments: CalendarAppointment[];
+  history: WorkoutCompletion[];
   onBook: (date: string, hour: number) => void;
   onCancelBooking: (id: string) => void;
   now: Date;
 }) {
   const [tab, setTab] = useState<"today" | "plan" | "diet" | "progress" | "profile">("today");
   const [activeWorkoutDayId, setActiveWorkoutDayId] = useState<string | null>(null);
+  const clientAttendance = attendanceFor(client.id, appointments, history, now);
   const dietTargets = dietPlan ? calculateTargets(dietPlan.profile) : null;
   const dietCompliance = dietPlan ? complianceForDay(dietPlan, mealLog) : 0;
   const plannedKcal = dietPlan ? sumMeals(dietPlan.meals).kcal : 0;
@@ -3221,7 +3266,7 @@ function ClientPortal({
                 <button disabled={!todayDay} onClick={() => todayDay && openWorkout(todayDay.id)} className="mt-8 h-12 w-full rounded-[16px] bg-[#ffc400] text-[10px] font-black uppercase tracking-[0.1em] text-[#050505] disabled:opacity-35">Rozpocznij trening</button>
               </section>
               <div className="min-w-0 space-y-4">
-                <section className={`${cardClass} p-5`}><div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/32">Najbliższe spotkanie</p><h3 className="mt-1 font-black">{client.nextSession}</h3></div><CalendarDays size={20} /></div><p className="mt-4 text-xs text-black/42">Termin jest zsynchronizowany z kalendarzem trenera.</p></section>
+                <section className={`${cardClass} p-5`}><div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/32">Najbliższe spotkanie</p><h3 className="mt-1 font-black">{nextSessionLabel(client.id, appointments, now)}</h3></div><CalendarDays size={20} /></div><p className="mt-4 text-xs text-black/42">Termin jest zsynchronizowany z kalendarzem trenera.</p></section>
                 <section className={`${cardClass} p-5`}><div className="flex justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/32">Ukończone treningi</p><p className="mt-2 text-2xl font-black">{completedWorkouts}</p></div><CheckCircle2 size={20} /></div><p className="mt-3 text-[10px] text-black/38">Każdy zapisany trening aktualizuje Twoją historię.</p></section>
                 <CheckinForm clientId={client.id} existing={findCheckin(checkins, client.id, currentWeekKey())} onSubmit={onSubmitCheckin} />
                 <ClientBooking settings={booking} appointments={appointments} myAppointments={appointments.filter((item) => item.clientId === client.id)} now={now} onBook={onBook} onCancel={onCancelBooking} />
@@ -3287,7 +3332,7 @@ function ClientPortal({
           )
         ) : tab === "progress" ? (
           <PortalSection title="Twoje postępy" subtitle="Historia realizacji programu" icon={TrendingUp}>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Ukończone treningi", String(completedWorkouts), "zapisane w aplikacji"], ["Masa", client.weight, "aktualny pomiar"], ["Tkanka tłuszczowa", client.bodyFat, "aktualny pomiar"], ["Frekwencja", client.attendance, "regularność spotkań"]].map(([label, value, change]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[9px] font-black uppercase text-black/30">{label}</p><p className="mt-3 text-xl font-black">{value}</p><p className="mt-1 text-[9px] text-black/38">{change}</p></div>)}</div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Ukończone treningi", String(completedWorkouts), "zapisane w aplikacji"], ["Masa", client.weight, "aktualny pomiar"], ["Tkanka tłuszczowa", client.bodyFat, "aktualny pomiar"], ["Frekwencja", clientAttendance ? `${clientAttendance.attended} z ${clientAttendance.total}` : "—", "obecność na minionych terminach"]].map(([label, value, change]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[9px] font-black uppercase text-black/30">{label}</p><p className="mt-3 text-xl font-black">{value}</p><p className="mt-1 text-[9px] text-black/38">{change}</p></div>)}</div>
             <p className="mt-6 rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-xs text-black/38">Wykres postępów pojawi się po zapisaniu pomiarów przez trenera.</p>
           </PortalSection>
         ) : (
