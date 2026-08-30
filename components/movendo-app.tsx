@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Apple, ArrowDown, ArrowUp, BarChart3, Bell, BookOpen, CalendarDays, CalendarPlus, Check, CheckCircle2, CheckSquare, ChevronLeft, ChevronRight, Download, Dumbbell, Eye, EyeOff, FileText, Filter, FolderOpen, LayoutDashboard, Library, LockKeyhole, LogOut, Mail, Menu, Monitor, Moon, MoreHorizontal, Phone, Plus, Search, Settings, ShieldCheck, Sparkles, Sun, TrendingUp, type LucideIcon, Upload, UserPlus, Users, X, Zap } from "lucide-react";
+import { Activity, Apple, ArrowDown, ArrowUp, BarChart3, Bell, BookmarkPlus, BookOpen, CalendarDays, CalendarPlus, Check, CheckCircle2, CheckSquare, ChevronLeft, ChevronRight, Copy, Download, Dumbbell, Eye, EyeOff, FileText, Filter, FolderOpen, LayoutDashboard, Library, LockKeyhole, LogOut, Mail, Menu, Monitor, Moon, MoreHorizontal, Phone, Plus, Search, Settings, ShieldCheck, Sparkles, Sun, Trash2, TrendingUp, type LucideIcon, Upload, UserPlus, Users, X, Zap } from "lucide-react";
 import {
   automations,
   initialTasks,
@@ -21,6 +21,7 @@ import { calculateTargets, complianceForDay, sumMeals, todayKey, type MealLog, t
 import { ClientWorkout } from "@/components/client-workout";
 import { exerciseLibrary, pluralExercises, searchExercises, suggestExercises } from "@/lib/exercises";
 import { currentWeekKey, findCheckin, checkinScore, type CheckinRecord } from "@/lib/checkins";
+import { copyPlanToClient, createPlanFromTemplate, createTemplateFromPlan, templateSummary, type PlanTemplate } from "@/lib/plan-templates";
 import { createTrainingDays, createTrainingDaysFromPlan, createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { enableSmoothWheelScroll } from "@/lib/smooth-scroll";
@@ -452,6 +453,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const [modal, setModal] = useState<{ type: ModalType; clientId?: string }>({ type: null });
   const [measurements, setMeasurements] = useState<Measurement[]>(() => readStoredJson("futurebody_measurements", []));
   const [checkins, setCheckins] = useState<CheckinRecord[]>(() => readStoredJson("futurebody_checkins", []));
+  const [planTemplates, setPlanTemplates] = useState<PlanTemplate[]>(() => readStoredJson("futurebody_plan_templates", []));
   const [planIntentClientId, setPlanIntentClientId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
@@ -636,6 +638,38 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.localStorage.setItem("movendo_calendar_history", JSON.stringify(appointments));
   }, [appointments]);
 
+  /** Zapis planu jako szablon do wielokrotnego użycia. */
+  function saveTemplate(plan: TrainingProgram, name: string, note: string) {
+    setPlanTemplates((current) => [createTemplateFromPlan(plan, name, note), ...current]);
+    notify("Szablon zapisany.");
+  }
+
+  function deleteTemplate(id: string) {
+    setPlanTemplates((current) => current.filter((item) => item.id !== id));
+    notify("Szablon usunięty.");
+  }
+
+  /** Przypisanie szablonu tworzy nowy, niezależny plan podopiecznego. */
+  function assignTemplate(template: PlanTemplate, clientId: string) {
+    const plan = createPlanFromTemplate(template, clientId);
+    setWorkoutPlans((current) => [plan, ...current]);
+    setPlanTemplates((current) => current.map((item) => item.id === template.id ? { ...item, usageCount: item.usageCount + 1 } : item));
+    setClients((current) => current.map((client) => client.id === clientId ? { ...client, plan: plan.name } : client));
+    notify(`Plan „${plan.name}" przypisany.`);
+  }
+
+  /** Kopia istniejącego planu dla innego podopiecznego. */
+  function copyPlan(plan: TrainingProgram, clientId: string) {
+    // Nazwa idzie za nowym właścicielem, żeby na liście nie było dwóch planów
+    // z imieniem osoby, która ich nie ma.
+    const target = clients.find((client) => client.id === clientId);
+    const name = target ? `${target.name.split(" ")[0]} · ${plan.category}` : plan.name;
+    const copy = copyPlanToClient(plan, clientId, name);
+    setWorkoutPlans((current) => [copy, ...current]);
+    setClients((current) => current.map((client) => client.id === clientId ? { ...client, plan: copy.name } : client));
+    notify(`Plan skopiowany do: ${clients.find((client) => client.id === clientId)?.name ?? "podopieczny"}.`);
+  }
+
   /** Trener oznacza check-in jako sprawdzony i zostawia notatkę dla podopiecznego. */
   function reviewCheckin(id: string, trainerNote: string) {
     setCheckins((current) => current.map((item) => item.id === id ? { ...item, trainerNote, reviewedAt: new Date().toISOString() } : item));
@@ -661,7 +695,8 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.localStorage.setItem("futurebody_meal_logs", JSON.stringify(mealLogs));
     window.localStorage.setItem("futurebody_measurements", JSON.stringify(measurements));
     window.localStorage.setItem("futurebody_checkins", JSON.stringify(checkins));
-  }, [checkins, clients, invitations, mealLogs, measurements, nutritionPlans, tasks, workoutHistory, workoutPlans]);
+    window.localStorage.setItem("futurebody_plan_templates", JSON.stringify(planTemplates));
+  }, [checkins, planTemplates, clients, invitations, mealLogs, measurements, nutritionPlans, tasks, workoutHistory, workoutPlans]);
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -1195,7 +1230,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
               notify={notify}
             />
           ) : (
-            <ViewRenderer view={activeView} checkins={checkins} onReviewCheckin={reviewCheckin} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} now={now} onAddWorkout={openScheduling} calendarIntent={calendarIntent} planIntentClientId={planIntentClientId} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={(type) => setModal({ type })} notify={notify} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
+            <ViewRenderer view={activeView} planTemplates={planTemplates} onSaveTemplate={saveTemplate} onDeleteTemplate={deleteTemplate} onAssignTemplate={assignTemplate} onCopyPlan={copyPlan} checkins={checkins} onReviewCheckin={reviewCheckin} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} now={now} onAddWorkout={openScheduling} calendarIntent={calendarIntent} planIntentClientId={planIntentClientId} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={(type) => setModal({ type })} notify={notify} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
           )}
           </div>
         </main>
@@ -1272,7 +1307,8 @@ function ViewRenderer(props: {
   appointments: CalendarAppointment[]; onSchedule: (input: { id?: string; date: string; hour: number; clientId: string }) => void;
   onCancelAppointment: (id: string) => void; onDeleteAppointment: (id: string) => void;
   workoutPlans: TrainingProgram[]; onSavePlan: (plan: TrainingProgram, clientId: string) => void; onUpdatePlan: (plan: TrainingProgram) => void;
-  workoutHistory: WorkoutCompletion[]; checkins: CheckinRecord[]; onReviewCheckin: (id: string, note: string) => void; onEnablePhoneNotifications: () => Promise<boolean>;
+  workoutHistory: WorkoutCompletion[]; checkins: CheckinRecord[]; onReviewCheckin: (id: string, note: string) => void;
+  planTemplates: PlanTemplate[]; onSaveTemplate: (plan: TrainingProgram, name: string, note: string) => void; onDeleteTemplate: (id: string) => void; onAssignTemplate: (template: PlanTemplate, clientId: string) => void; onCopyPlan: (plan: TrainingProgram, clientId: string) => void; onEnablePhoneNotifications: () => Promise<boolean>;
   themePreference: ThemePreference; onThemeChange: (theme: ThemePreference) => void;
   profile: TrainerProfile; onProfileChange: (profile: TrainerProfile) => void;
   nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; nutritionClient: Client | null;
@@ -1283,7 +1319,7 @@ function ViewRenderer(props: {
     case "dashboard": return <Dashboard now={props.now} checkins={props.checkins} clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} workoutHistory={props.workoutHistory} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
     case "clients": return <ClientsView clients={props.clients} query={props.query} onClient={props.onClient} onAdd={() => props.onModal("client")} />;
     case "calendar": return <CalendarView clients={props.clients} appointments={props.appointments} onSchedule={props.onSchedule} onOpenClient={props.onClient} onStartWorkout={props.onStartWorkout} onCancel={props.onCancelAppointment} onDelete={props.onDeleteAppointment} autoSchedule={props.calendarIntent} />;
-    case "plans": return <PlansView clients={props.clients} workoutPlans={props.workoutPlans} initialPlanId={props.selectedPlanId} onOpenDetail={props.onOpenPlan} onCloseDetail={() => props.onNavigate("plans")} onSavePlan={props.onSavePlan} onUpdatePlan={props.onUpdatePlan} notify={props.notify} planIntentClientId={props.planIntentClientId} />;
+    case "plans": return <PlansView planTemplates={props.planTemplates} onSaveTemplate={props.onSaveTemplate} onDeleteTemplate={props.onDeleteTemplate} onAssignTemplate={props.onAssignTemplate} onCopyPlan={props.onCopyPlan} clients={props.clients} workoutPlans={props.workoutPlans} initialPlanId={props.selectedPlanId} onOpenDetail={props.onOpenPlan} onCloseDetail={() => props.onNavigate("plans")} onSavePlan={props.onSavePlan} onUpdatePlan={props.onUpdatePlan} notify={props.notify} planIntentClientId={props.planIntentClientId} />;
     case "exercises": return <ExercisesView />;
     case "progress": return <ProgressView clients={props.clients} workoutHistory={props.workoutHistory} onMeasurement={() => props.onModal("measurement")} />;
     case "checkins": return <CheckinsView clients={props.clients} checkins={props.checkins} onReview={props.onReviewCheckin} onOpenClient={props.onClient} />;
@@ -2053,16 +2089,24 @@ function ScheduleDialog({ slot, clients, currentClientId, onClose, onSelect }: {
   );
 }
 
-function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onCloseDetail, onSavePlan, onUpdatePlan, notify, planIntentClientId }: { clients: Client[]; planIntentClientId?: string | null; workoutPlans: TrainingProgram[]; initialPlanId: string | null; onOpenDetail: (planId: string) => void; onCloseDetail: () => void; onSavePlan: (plan: TrainingProgram, clientId: string) => void; onUpdatePlan: (plan: TrainingProgram) => void; notify: (text: string) => void }) {
+function PlansView({ clients, workoutPlans, planTemplates, onSaveTemplate, onDeleteTemplate, onAssignTemplate, onCopyPlan, initialPlanId, onOpenDetail, onCloseDetail, onSavePlan, onUpdatePlan, notify, planIntentClientId }: { clients: Client[]; planTemplates: PlanTemplate[]; onSaveTemplate: (plan: TrainingProgram, name: string, note: string) => void; onDeleteTemplate: (id: string) => void; onAssignTemplate: (template: PlanTemplate, clientId: string) => void; onCopyPlan: (plan: TrainingProgram, clientId: string) => void; planIntentClientId?: string | null; workoutPlans: TrainingProgram[]; initialPlanId: string | null; onOpenDetail: (planId: string) => void; onCloseDetail: () => void; onSavePlan: (plan: TrainingProgram, clientId: string) => void; onUpdatePlan: (plan: TrainingProgram) => void; notify: (text: string) => void }) {
   // Wejście z profilu podopiecznego od razu otwiera kreator planu.
   // `open` bez wskazanej ścieżki pokazuje ekran wyboru sposobu tworzenia planu.
   const [wizardOpen, setWizardOpen] = useState(Boolean(planIntentClientId));
   const [wizardPath, setWizardPath] = useState<PlanPath | null>(null);
   const [editingPlan, setEditingPlan] = useState<TrainingProgram | null>(() => initialPlanId ? workoutPlans.find((plan) => plan.id === initialPlanId) ?? null : null);
+  // Okno "co zrobić z planem": zapisz jako szablon albo skopiuj do innej osoby.
+  const [planAction, setPlanAction] = useState<{ plan: TrainingProgram; mode: "template" | "copy" } | null>(null);
+  const [assigningTemplate, setAssigningTemplate] = useState<PlanTemplate | null>(null);
 
   if (editingPlan) {
     const assignedClient = clients.find((client) => client.id === editingPlan.clientId);
-    return <PlanEditor plan={editingPlan} clientName={assignedClient?.name} goal={assignedClient?.goal} onClose={() => { setEditingPlan(null); onCloseDetail(); }} onSave={(plan) => { onUpdatePlan(plan); setEditingPlan(null); onCloseDetail(); }}/>;
+    return <>
+    <PlanEditor plan={editingPlan} onSaveTemplate={(current) => setPlanAction({ plan: current, mode: "template" })} clientName={assignedClient?.name} goal={assignedClient?.goal} onClose={() => { setEditingPlan(null); onCloseDetail(); }} onSave={(plan) => { onUpdatePlan(plan); setEditingPlan(null); onCloseDetail(); }}/>
+    {planAction?.mode === "template" ? (
+      <SaveTemplateDialog plan={planAction.plan} onClose={() => setPlanAction(null)} onSave={(name, note) => { onSaveTemplate(planAction.plan, name, note); setPlanAction(null); }} />
+    ) : null}
+    </>;
   }
 
   return <>
@@ -2079,6 +2123,37 @@ function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onClose
       <div className="bg-white p-4 sm:p-5"><p className="text-[9px] font-black uppercase tracking-wider text-black/34">Baza ćwiczeń</p><p className="mt-2 text-2xl font-black">{exerciseLibrary.length}</p></div>
     </section>
 
+    {planTemplates.length ? (
+      <section className={`${cardClass} mb-4 overflow-hidden`}>
+        <div className="flex items-center justify-between gap-3 border-b border-black/[0.06] px-4 py-3.5 sm:px-5">
+          <div>
+            <h2 className="text-base font-black tracking-[-0.02em]">Szablony</h2>
+            <p className="mt-0.5 text-[11px] text-black/38">Gotowe układy do przypisania kolejnym osobom</p>
+          </div>
+          <span className="shrink-0 text-[11px] font-black text-black/38">{planTemplates.length}</span>
+        </div>
+        <div className="divide-y divide-black/[0.055]">
+          {planTemplates.map((template) => {
+            const summary = templateSummary(template);
+            return (
+              <div key={template.id} className="flex flex-wrap items-center gap-2 p-4 sm:px-5">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-black">{template.name}</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-black/40">
+                    {template.category} · {summary.days} {summary.days === 1 ? "dzień" : "dni"} · {summary.exercises} {pluralExercises(summary.exercises)}
+                    {template.usageCount ? ` · użyty ${template.usageCount}×` : ""}
+                  </span>
+                  {template.note ? <span className="mt-1 block truncate text-[10px] text-black/32">{template.note}</span> : null}
+                </span>
+                <button onClick={() => setAssigningTemplate(template)} className="h-10 shrink-0 rounded-full bg-black px-4 text-[9px] font-black uppercase tracking-wider text-white">Przypisz</button>
+                <button onClick={() => onDeleteTemplate(template.id)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-red-50 text-red-700" aria-label={`Usuń szablon ${template.name}`}><Trash2 size={14} /></button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    ) : null}
+
     <div className="mb-4 flex items-center justify-between"><div><h2 className="text-lg font-black">Programy podopiecznych</h2><p className="text-[10px] text-black/36">Kliknij plan, aby zobaczyć dni i ćwiczenia.</p></div></div>
 
     {workoutPlans.length ? <div className="fb-grid-stretch grid gap-4 md:grid-cols-2 xl:grid-cols-3">{workoutPlans.map((plan) => {
@@ -2091,23 +2166,146 @@ function PlansView({ clients, workoutPlans, initialPlanId, onOpenDetail, onClose
           <div className="mt-5 flex items-center gap-3 rounded-2xl bg-[#f3f3f1] p-3"><Avatar initials={client?.initials ?? "—"} size="sm" dark/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{client?.name ?? "Plan bez przypisanego podopiecznego"}</span><span className="mt-0.5 block truncate text-[9px] text-black/36">{client?.goal ?? "Przypisz podopiecznego w edytorze"}</span></span><ChevronRight size={15}/></div>
           <div className="mt-5"><div className="mb-2 flex justify-between text-[9px]"><span className="text-black/36">Realizacja planu</span><strong>{plan.completion}%</strong></div><ProgressBar value={plan.completion}/></div>
         </button>
-        <div className="flex items-center justify-between border-t border-black/[0.055] px-5 py-3"><span className="text-[9px] text-black/34">Aktualizacja: {plan.updated}</span><button onClick={() => { onOpenDetail(plan.id); notify(`Otwierasz plan: ${plan.name}`); }} className="h-10 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white">Otwórz plan</button></div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-black/[0.055] px-5 py-3">
+          <button onClick={() => setPlanAction({ plan, mode: "template" })} className="h-10 rounded-full border border-black/12 px-3.5 text-[9px] font-black uppercase tracking-wider" title="Zapisz układ planu jako szablon"><BookmarkPlus size={12} className="mr-1.5 inline" />Szablon</button>
+          <button onClick={() => setPlanAction({ plan, mode: "copy" })} className="h-10 rounded-full border border-black/12 px-3.5 text-[9px] font-black uppercase tracking-wider" title="Skopiuj plan do innego podopiecznego"><Copy size={12} className="mr-1.5 inline" />Kopiuj</button>
+          <button onClick={() => { onOpenDetail(plan.id); notify(`Otwierasz plan: ${plan.name}`); }} className="ml-auto h-10 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white">Otwórz</button>
+        </div>
       </article>;
     })}</div> : <section className={cardClass}><EmptyState icon={Dumbbell} title="Nie masz jeszcze planów" text="Utwórz pierwszy plan i przypisz go do podopiecznego."/></section>}
 
-    {wizardOpen ? <PlanWizard initialPath={wizardPath} clients={clients} presetClientId={planIntentClientId ?? undefined} onClose={() => setWizardOpen(false)} onSave={(plan, clientId) => { onSavePlan(plan, clientId); setWizardOpen(false); }}/> : null}
+    {wizardOpen ? <PlanWizard initialPath={wizardPath} templates={planTemplates} onUseTemplate={(template) => { setWizardOpen(false); setAssigningTemplate(template); }} clients={clients} presetClientId={planIntentClientId ?? undefined} onClose={() => setWizardOpen(false)} onSave={(plan, clientId) => { onSavePlan(plan, clientId); setWizardOpen(false); }}/> : null}
     {editingPlan ? <PlanEditor plan={editingPlan} onClose={() => setEditingPlan(null)} onSave={(plan) => { onUpdatePlan(plan); setEditingPlan(null); }}/> : null}
+
+    {planAction?.mode === "template" ? (
+      <SaveTemplateDialog plan={planAction.plan} onClose={() => setPlanAction(null)} onSave={(name, note) => { onSaveTemplate(planAction.plan, name, note); setPlanAction(null); }} />
+    ) : null}
+
+    {planAction?.mode === "copy" ? (
+      <PickClientDialog
+        title="Skopiuj plan"
+        subtitle={`„${planAction.plan.name}" trafi do wybranej osoby jako osobny plan.`}
+        clients={clients.filter((client) => client.id !== planAction.plan.clientId)}
+        confirmLabel="Skopiuj plan"
+        onClose={() => setPlanAction(null)}
+        onPick={(clientId) => { onCopyPlan(planAction.plan, clientId); setPlanAction(null); }}
+      />
+    ) : null}
+
+    {assigningTemplate ? (
+      <PickClientDialog
+        title="Przypisz szablon"
+        subtitle={`„${assigningTemplate.name}" zostanie skopiowany jako nowy plan.`}
+        clients={clients}
+        confirmLabel="Przypisz plan"
+        onClose={() => setAssigningTemplate(null)}
+        onPick={(clientId) => { onAssignTemplate(assigningTemplate, clientId); setAssigningTemplate(null); }}
+      />
+    ) : null}
   </>;
+}
+
+/** Nazwa i notatka nowego szablonu. */
+function SaveTemplateDialog({ plan, onClose, onSave }: { plan: TrainingProgram; onClose: () => void; onSave: (name: string, note: string) => void }) {
+  const [name, setName] = useState(plan.name);
+  const [note, setNote] = useState("");
+  return (
+    <div className="fixed inset-0 z-[88] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4">
+      <button className="absolute inset-0" onClick={onClose} aria-label="Zamknij" />
+      <section className="ui-sheet relative flex w-full flex-col rounded-t-[28px] shadow-2xl sm:max-w-md sm:rounded-[28px]">
+        <div className="px-5 pt-4 sm:px-7 sm:pt-7">
+          <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/15 sm:hidden" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/32">Nowy szablon</p>
+              <h2 className="mt-1.5 text-xl font-black tracking-[-0.03em]">Zapisz układ planu</h2>
+            </div>
+            <button onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#f1f1ef]" aria-label="Zamknij"><X size={16} /></button>
+          </div>
+        </div>
+        <div className="space-y-4 px-5 py-5 sm:px-7">
+          <p className="rounded-2xl bg-[#f3f3f1] p-3.5 text-[11px] leading-5 text-black/50">
+            Szablon zapisuje dni, ćwiczenia i wszystkie parametry serii. Nie zapisuje podopiecznego ani jego postępu.
+          </p>
+          <label className="block">
+            <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-black/32">Nazwa szablonu</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} className="h-12 w-full rounded-2xl bg-[#f3f3f1] px-4 text-base outline-none sm:text-sm" />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-black/32">Dla kogo (opcjonalnie)</span>
+            <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="np. początkujący, 3 dni, pełna siłownia" className="h-12 w-full rounded-2xl bg-[#f3f3f1] px-4 text-base outline-none sm:text-sm" />
+          </label>
+        </div>
+        <div className="flex gap-2 border-t border-black/[0.06] px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-7">
+          <button onClick={onClose} className="h-12 flex-1 rounded-full border border-black/12 text-[10px] font-black uppercase tracking-wider">Anuluj</button>
+          <button disabled={!name.trim()} onClick={() => onSave(name, note)} className="h-12 flex-1 rounded-full bg-black text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-30">Zapisz szablon</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** Wybór podopiecznego dla kopii planu albo szablonu. */
+function PickClientDialog({ title, subtitle, clients, confirmLabel, onClose, onPick }: {
+  title: string;
+  subtitle: string;
+  clients: Client[];
+  confirmLabel: string;
+  onClose: () => void;
+  onPick: (clientId: string) => void;
+}) {
+  const [picked, setPicked] = useState("");
+  return (
+    <div className="fixed inset-0 z-[88] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4">
+      <button className="absolute inset-0" onClick={onClose} aria-label="Zamknij" />
+      <section className="ui-sheet relative flex max-h-[85svh] w-full flex-col rounded-t-[28px] shadow-2xl sm:max-w-md sm:rounded-[28px]">
+        <div className="shrink-0 px-5 pt-4 sm:px-7 sm:pt-7">
+          <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/15 sm:hidden" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-xl font-black tracking-[-0.03em]">{title}</h2>
+              <p className="mt-1 text-[11px] leading-5 text-black/42">{subtitle}</p>
+            </div>
+            <button onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#f1f1ef]" aria-label="Zamknij"><X size={16} /></button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
+          {clients.length ? (
+            <div className="grid gap-2">
+              {clients.map((client) => (
+                <button key={client.id} onClick={() => setPicked(client.id)} aria-pressed={picked === client.id}
+                  className={`flex min-h-16 items-center gap-3 rounded-2xl border p-3.5 text-left transition ${picked === client.id ? "border-black bg-black text-white" : "border-black/[0.07] bg-white"}`}>
+                  <Avatar initials={client.initials} dark={picked === client.id} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-black">{client.name}</span>
+                    <span className={`mt-0.5 block truncate text-[11px] ${picked === client.id ? "text-white/50" : "text-black/40"}`}>{client.goal}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-2xl border border-dashed border-black/10 px-4 py-10 text-center text-xs text-black/38">Brak podopiecznych do wyboru.</p>
+          )}
+        </div>
+        <div className="flex shrink-0 gap-2 border-t border-black/[0.06] px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-7">
+          <button onClick={onClose} className="h-12 flex-1 rounded-full border border-black/12 text-[10px] font-black uppercase tracking-wider">Anuluj</button>
+          <button disabled={!picked} onClick={() => onPick(picked)} className="h-12 flex-1 rounded-full bg-black text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-30">{confirmLabel}</button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 type PlanPath = "auto" | "manual";
 
-function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
+function PlanWizard({ initialPath, clients, templates, presetClientId, onClose, onSave, onUseTemplate }: {
   initialPath: PlanPath | null;
   clients: Client[];
+  templates: PlanTemplate[];
   presetClientId?: string;
   onClose: () => void;
   onSave: (plan: TrainingProgram, clientId: string) => void;
+  onUseTemplate: (template: PlanTemplate) => void;
 }) {
   const [path, setPath] = useState<PlanPath | null>(initialPath);
   const [step, setStep] = useState(presetClientId ? 1 : 0);
@@ -2195,6 +2393,7 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
       { id: "auto", title: "Generowany pod cel", text: "Podajesz cel i ankietę, resztę dobiera aplikacja.", bullets: ["Ćwiczenia dobrane do celu", "Gotowy plan w dwóch krokach", "Wszystko można później edytować"], icon: Sparkles },
       { id: "manual", title: "Krok po kroku", text: "Sam wybierasz każde ćwiczenie z biblioteki.", bullets: ["Pełna kontrola nad doborem", "Wyszukiwarka i podpowiedzi", "Dłuższa ścieżka, cztery kroki"], icon: Dumbbell },
     ];
+    const summaries = templates.map((template) => ({ template, summary: templateSummary(template) }));
     return (
       <div className={shell}>
         <button className="absolute inset-0" onClick={onClose} aria-label="Zamknij" />
@@ -2227,6 +2426,24 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
                 );
               })}
             </div>
+
+            {summaries.length ? (
+              <div className="mt-4">
+                <p className="mb-2 text-[9px] font-black uppercase tracking-wider text-black/32">Albo z gotowego szablonu</p>
+                <div className="grid gap-2">
+                  {summaries.map(({ template, summary }) => (
+                    <button key={template.id} onClick={() => onUseTemplate(template)} className="flex min-h-16 items-center gap-3 rounded-2xl border border-black/[0.07] bg-white p-3.5 text-left transition hover:border-black/25">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f1f1ef]"><BookmarkPlus size={17} /></span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-black">{template.name}</span>
+                        <span className="mt-0.5 block truncate text-[11px] text-black/40">{summary.days} {summary.days === 1 ? "dzień" : "dni"} · {summary.exercises} {pluralExercises(summary.exercises)}{template.note ? ` · ${template.note}` : ""}</span>
+                      </span>
+                      <ChevronRight size={16} className="shrink-0 text-black/25" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

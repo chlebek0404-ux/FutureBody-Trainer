@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Check, CheckCircle2, ChevronDown, ChevronLeft, Dumbbell, Plus, RefreshCcw, Save, Search, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, BookmarkPlus, Check, CheckCircle2, ChevronDown, ChevronLeft, Dumbbell, Plus, RefreshCcw, Save, Search, Trash2, X } from "lucide-react";
 
 import ExerciseMotion from "@/components/exercise-motion";
 import { exerciseLibrary, getExerciseSubstitutions, searchExercises, type ExerciseRecord } from "@/lib/exercises";
@@ -25,7 +25,7 @@ function createProgramItem(exercise: ExerciseRecord, dayId: string): ProgramExer
   };
 }
 
-export function PlanEditor({ plan, clientName, goal, onClose, onSave }: { plan: TrainingProgram; clientName?: string; goal?: string; onClose: () => void; onSave: (plan: TrainingProgram) => void }) {
+export function PlanEditor({ plan, clientName, goal, onClose, onSave, onSaveTemplate }: { plan: TrainingProgram; clientName?: string; goal?: string; onClose: () => void; onSave: (plan: TrainingProgram) => void; onSaveTemplate?: (plan: TrainingProgram) => void }) {
   const [draft, setDraft] = useState<TrainingProgram>(() => structuredClone(plan));
   const [activeDayId, setActiveDayId] = useState(plan.trainingDays[0]?.id ?? "");
   const [pickerItemId, setPickerItemId] = useState<string | null>(null);
@@ -100,7 +100,7 @@ export function PlanEditor({ plan, clientName, goal, onClose, onSave }: { plan: 
       <div className="mx-auto min-h-full max-w-7xl overflow-hidden rounded-[30px] bg-[#f4f4f2] shadow-sm">
         <header className="sticky top-0 z-20 flex items-center border-b border-black/[0.07] bg-[#f4f4f2]/95 px-5 py-4 backdrop-blur-xl sm:px-7">
           <div className="min-w-0"><button onClick={onClose} className="mb-1 flex items-center gap-1 text-[9px] font-black uppercase tracking-[0.14em] text-black/36"><ChevronLeft size={13}/>Plany</button><p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/30">{clientName ? `${clientName} · ${goal ?? "aktywny program"}` : "Plan bez przypisanego podopiecznego"}</p><input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} className="mt-1 w-full bg-transparent text-xl font-black outline-none sm:text-2xl" /></div>
-          <div className="ml-auto flex gap-2"><button onClick={save} className="flex h-10 items-center gap-2 rounded-full bg-black px-5 text-[10px] font-black uppercase text-white"><Save size={14}/>Zapisz plan</button><button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-white"><X size={16}/></button></div>
+          <div className="ml-auto flex gap-2">{onSaveTemplate ? <button onClick={() => onSaveTemplate(draft)} className="hidden h-10 items-center gap-2 rounded-full border border-black/12 px-4 text-[10px] font-black uppercase sm:flex" title="Zapisz układ planu jako szablon"><BookmarkPlus size={14}/>Szablon</button> : null}<button onClick={save} className="flex h-10 items-center gap-2 rounded-full bg-black px-5 text-[10px] font-black uppercase text-white"><Save size={14}/>Zapisz plan</button><button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-white"><X size={16}/></button></div>
         </header>
 
         <div className="grid gap-5 p-5 sm:p-7 xl:grid-cols-[230px_1fr]">

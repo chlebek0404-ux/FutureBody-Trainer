@@ -71,11 +71,11 @@ function describeDay(exerciseIds: string[]) {
 }
 
 /** Buduje pozycje jednego dnia z listy identyfikatorów ćwiczeń. */
-function buildDayItems(dayIndex: number, exerciseIds: string[]): ProgramExercise[] {
+function buildDayItems(dayIndex: number, exerciseIds: string[], seed: string): ProgramExercise[] {
   return exerciseIds.map((exerciseId, itemIndex) => {
     const exercise = exerciseLibrary.find((candidate) => candidate.id === exerciseId) ?? exerciseLibrary[0];
     return {
-      id: `item-${dayIndex}-${itemIndex}-${exercise.id}`,
+      id: `item-${seed}-${dayIndex}-${itemIndex}`,
       exerciseId: exercise.id,
       sets: exercise.level === "Zaawansowany" ? 4 : 3,
       reps: exercise.protocol.includes("×") ? exercise.protocol.split("×")[1]?.trim() || "8" : "8–12",
@@ -94,12 +94,12 @@ function buildDayItems(dayIndex: number, exerciseIds: string[]): ProgramExercise
  * Dni zbudowane z jawnego podziału: jedna lista ćwiczeń na jeden dzień.
  * Trener decyduje, co trafia do którego dnia — nic nie jest rozdzielane losowo.
  */
-export function createTrainingDaysFromPlan(dayPlans: string[][]): TrainingDay[] {
+export function createTrainingDaysFromPlan(dayPlans: string[][], seed = String(Date.now())): TrainingDay[] {
   return dayPlans.slice(0, 7).map((exerciseIds, dayIndex) => ({
     id: `day-${dayIndex + 1}`,
     name: `Dzień ${dayIndex + 1}`,
     focus: describeDay(exerciseIds),
-    items: buildDayItems(dayIndex, exerciseIds),
+    items: buildDayItems(dayIndex, exerciseIds, seed),
   }));
 }
 
@@ -107,7 +107,7 @@ export function createTrainingDaysFromPlan(dayPlans: string[][]): TrainingDay[] 
  * Dni zbudowane z jednej listy: ćwiczenia rozkładane po kolei na wszystkie dni.
  * Używane przez ścieżkę generowaną pod cel.
  */
-export function createTrainingDays(dayCount: number, exerciseIds: string[]): TrainingDay[] {
+export function createTrainingDays(dayCount: number, exerciseIds: string[], seed?: string): TrainingDay[] {
   const safeDayCount = Math.max(1, Math.min(dayCount, 7));
   const sourceIds = exerciseIds.length ? exerciseIds : exerciseLibrary.slice(0, 6).map((exercise) => exercise.id);
 
@@ -116,6 +116,7 @@ export function createTrainingDays(dayCount: number, exerciseIds: string[]): Tra
       const distributed = sourceIds.filter((_, exerciseIndex) => exerciseIndex % safeDayCount === dayIndex);
       return distributed.length ? distributed : [sourceIds[dayIndex % sourceIds.length]];
     }),
+    seed,
   );
 }
 
@@ -131,11 +132,14 @@ export function createTrainingProgram(input: {
   dayExerciseIds?: string[][];
   duration?: string;
 }): TrainingProgram {
+  // Identyfikator planu jest jednocześnie ziarnem identyfikatorów pozycji,
+  // więc dwa plany nigdy nie mają pozycji o tym samym id.
+  const id = input.id ?? `plan-${Date.now()}`;
   const trainingDays = input.dayExerciseIds
-    ? createTrainingDaysFromPlan(input.dayExerciseIds)
-    : createTrainingDays(input.dayCount, input.exerciseIds ?? []);
+    ? createTrainingDaysFromPlan(input.dayExerciseIds, id)
+    : createTrainingDays(input.dayCount, input.exerciseIds ?? [], id);
   return {
-    id: input.id ?? `plan-${Date.now()}`,
+    id,
     name: input.name,
     category: input.category,
     days: trainingDays.length,
