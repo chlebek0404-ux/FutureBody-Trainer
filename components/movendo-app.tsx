@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Apple, ArrowDown, ArrowUp, BarChart3, Bell, BookmarkPlus, BookOpen, CalendarDays, CalendarPlus, Check, CheckCircle2, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Dumbbell, Eye, EyeOff, FileText, Filter, FolderOpen, LayoutDashboard, Library, LockKeyhole, LogOut, Mail, Menu, Monitor, Moon, MoreHorizontal, Phone, Plus, Search, Settings, ShieldCheck, Sparkles, Sun, Trash2, TrendingUp, type LucideIcon, Upload, UserPlus, Users, X, Zap } from "lucide-react";
+import { Activity, Apple, ArrowDown, ArrowUp, BarChart3, Bell, BookmarkPlus, BookOpen, CalendarDays, CalendarPlus, Check, CheckCircle2, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Copy, Download, Dumbbell, Eye, EyeOff, FileText, Filter, FolderOpen, LayoutDashboard, Library, LockKeyhole, LogOut, Mail, Menu, Monitor, Moon, MoreHorizontal, Phone, Plus, Search, Settings, ShieldCheck, Sparkles, Sun, Trash2, TrendingUp, type LucideIcon, Upload, UserPlus, Users, X, Zap } from "lucide-react";
 import {
   automations,
   initialTasks,
@@ -24,6 +24,7 @@ import { checkinConcerns, checkinQuestions, checkinScore, currentWeekKey, findCh
 import { copyPlanToClient, createPlanFromTemplate, createTemplateFromPlan, templateSummary, type PlanTemplate } from "@/lib/plan-templates";
 import { attendance as attendanceFor, calendarDaysBetween, lastActivityLabel, nextSessionLabel, planForClient, planLabel, weeklyRealisation } from "@/lib/client-metrics";
 import { defaultBookingSettings, type BookingSettings } from "@/lib/booking";
+import { useScrollTopOnChange } from "@/lib/use-scroll-top";
 import { BookingSettingsPanel, ClientBooking } from "@/components/booking";
 import { availableMetrics, formatValue, metricDefinitions, metricSeries, metricSummary, plural, readMetric as readMetricValue, type MetricId } from "@/lib/measurements";
 import MeasurementChart from "@/components/measurement-chart";
@@ -802,6 +803,25 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.setTimeout(() => setToast(null), 2600);
   }
 
+  /**
+   * Stan po zalogowaniu. Adres w pasku mógł zostać z poprzedniej sesji albo
+   * z zakładki otwartej dawno temu, więc panel zawsze otwiera się na pulpicie,
+   * a nie na przypadkowym widoku sprzed wylogowania.
+   */
+  function enterWorkspace() {
+    setActiveView("dashboard");
+    setSelectedClient(null);
+    setSelectedPlanId(null);
+    setTrainerWorkout(null);
+    setNutritionClientId(null);
+    setPlanIntentClientId(null);
+    setCalendarIntent(false);
+    setMobileMenu(false);
+    setMoreNavigationOpen(false);
+    updateRoute("dashboard", true);
+    scrollToTop();
+  }
+
   // Wejście do trybu podglądu. Nieosiągalne przy skonfigurowanym Supabase
   // oraz w buildzie produkcyjnym — patrz `isPreviewBuild`.
   function loginToPreview(email: string, password: string) {
@@ -820,6 +840,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     ]);
     setPreviewMode(true);
     startHandoff();
+    enterWorkspace();
     if (previewRole === "client") {
       setClientSession(workspace.clients.find((client) => client.id === previewClientId) ?? null);
       setRole("client");
@@ -858,6 +879,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     const session = await loadAccountSession(supabase, data.user.id, data.user.email ?? email);
     if (!session) return "To konto nie ma jeszcze profilu w systemie. Skontaktuj się z trenerem prowadzącym.";
     if (session.role === "client" && !session.clientRecord) return "Konto nie jest przypisane do trenera. Użyj kodu aktywacyjnego otrzymanego od trenera.";
+    enterWorkspace();
     applySession(session);
     return null;
   }
@@ -870,6 +892,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     if (error) return "Nie udało się utworzyć konta. Ten adres może być już zajęty.";
     if (!data.session) return "INFO:Konto utworzone. Potwierdź adres e-mail, aby się zalogować.";
     const session = data.user ? await loadAccountSession(supabase, data.user.id, data.user.email ?? email) : null;
+    enterWorkspace();
     applySession(session ?? { userId: data.user?.id ?? "", email, role: "trainer", fullName: name, clientRecord: null });
     return null;
   }
@@ -913,6 +936,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
       setInvitations((current) => current.map((item) => item.code === info.code ? { ...item, status: "used" } : item));
       const session = data.user ? await loadAccountSession(supabase, data.user.id, data.user.email ?? email) : null;
       if (!session?.clientRecord) return "Konto powstało, ale profil podopiecznego nie jest jeszcze dostępny. Zaloguj się za chwilę.";
+      enterWorkspace();
       applySession(session);
       return null;
     }
@@ -1565,6 +1589,27 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, worko
   }
   attention.sort((a, b) => a.weight - b.weight);
 
+  /**
+   * Kafelki szybkiego wyboru. Pierwszy zmienia się razem z dniem: gdy jest
+   * zaplanowany trening, prowadzi wprost do niego; gdy nie ma — do dodania
+   * terminu. Reszta to stałe wejścia do najczęstszych czynności.
+   */
+  const quickTiles: { label: string; detail: string; icon: LucideIcon; action: () => void; accent?: boolean }[] = [
+    nextAppointment && nextClient
+      ? {
+          label: "Rozpocznij trening",
+          detail: `${nextClient.name.split(" ")[0]} · ${String(nextAppointment.hour).padStart(2, "0")}:00`,
+          icon: Dumbbell,
+          action: () => onStartWorkout(nextClient.id),
+          accent: true,
+        }
+      : { label: "Zaplanuj trening", detail: "Wolny dzień w kalendarzu", icon: CalendarPlus, action: onAddWorkout, accent: true },
+    { label: "Podopieczni", detail: `${clients.length} ${plural(clients.length, "profil", "profile", "profili")}`, icon: Users, action: () => onNavigate("clients") },
+    { label: "Utwórz plan", detail: clientsWithoutPlan.length ? `${clientsWithoutPlan.length} bez planu` : "Kreator i szablony", icon: ClipboardList, action: () => onNavigate("plans") },
+    { label: "Dieta", detail: clientsWithoutDiet.length ? `${clientsWithoutDiet.length} bez diety` : "Zapotrzebowanie i posiłki", icon: Apple, action: () => onNavigate("nutrition") },
+    { label: "Dodaj podopiecznego", detail: "Profil i kod dostępu", icon: UserPlus, action: () => onModal("client") },
+  ];
+
   const stats: { label: string; value: string; hint?: string }[] = [
     { label: "Treningi dziś", value: String(today.length) },
     { label: "Aktywni podopieczni", value: String(clients.filter((client) => client.status === "Aktywny").length), hint: `z ${clients.length}` },
@@ -1575,6 +1620,31 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, worko
 
   return (
     <>
+      {/* Szybki wybór: rzeczy, po które trener sięga najczęściej, w zasięgu
+          jednego kliknięcia, bez przewijania. Pierwszy kafelek prowadzi wprost
+          do najbliższego treningu, więc najczęstsza czynność dnia jest też
+          najbliżej. */}
+      <section className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {quickTiles.map((tile) => {
+          const Icon = tile.icon;
+          return (
+            <button
+              key={tile.label}
+              onClick={tile.action}
+              className={`fb-card fb-card-interactive flex min-h-24 flex-col justify-between p-4 text-left ${tile.accent ? "!border-[var(--fb-gold)] !bg-[color-mix(in_srgb,var(--fb-gold)_10%,transparent)]" : ""}`}
+            >
+              <span className={`grid h-10 w-10 place-items-center rounded-2xl ${tile.accent ? "bg-[var(--fb-gold)] text-[#0c0c0f]" : "border border-[var(--fb-border)] bg-[var(--fb-glass-strong)]"}`}>
+                <Icon size={17} />
+              </span>
+              <span className="mt-3 block">
+                <span className="block truncate text-sm font-black">{tile.label}</span>
+                <span className="mt-0.5 block truncate text-[10px] text-[var(--fb-text-muted)]">{tile.detail}</span>
+              </span>
+            </button>
+          );
+        })}
+      </section>
+
       {/* Hero: dzień, najbliższy trening i akcja główna w jednym kadrze. */}
       <section className="fb-panel relative overflow-hidden p-6 sm:p-8 lg:p-10">
         <div className="relative">
@@ -1767,26 +1837,6 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, worko
           )}
         </section>
 
-        {/* Skróty. */}
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-          {[
-            { label: "Utwórz plan", detail: "Kreator w dwóch ścieżkach", icon: Dumbbell, action: () => onNavigate("plans") },
-            { label: "Dieta", detail: "Zapotrzebowanie i posiłki", icon: Apple, action: () => onNavigate("nutrition") },
-            { label: "Dodaj podopiecznego", detail: "Profil i kod dostępu", icon: UserPlus, action: () => onModal("client") },
-          ].map((item) => {
-            const Icon = item.icon;
-            return (
-              <button key={item.label} onClick={item.action} className="fb-card fb-card-interactive flex items-center gap-4 p-4 text-left">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--fb-border)] bg-[var(--fb-glass-strong)]"><Icon size={18} /></span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-black">{item.label}</span>
-                  <span className="mt-0.5 block truncate text-[10px] text-[var(--fb-text-muted)]">{item.detail}</span>
-                </span>
-                <ChevronRight size={16} className="shrink-0 text-[var(--fb-text-muted)]" />
-              </button>
-            );
-          })}
-        </section>
         </div>
       </div>
     </>
@@ -2001,6 +2051,7 @@ function MeasurementProgress({ client, measurements, onAddMeasurement }: { clien
 
 function ClientProfile({ client, invitation, measurements, checkins, plans, appointments, history, now, onBack, onAction, onCreatePlan, onOpenCalendar, onOpenPlan, onStartWorkout, onNewInvitation, onCopy, notify }: { client: Client; invitation?: ClientInvitation; measurements: Measurement[]; checkins: CheckinRecord[]; plans: TrainingProgram[]; appointments: CalendarAppointment[]; history: WorkoutCompletion[]; now: Date; onBack: () => void; onAction: (type: ModalType) => void; onCreatePlan: () => void; onOpenCalendar: () => void; onOpenPlan: () => void; onStartWorkout: () => void; onNewInvitation: () => void; onCopy: (value: string, label: string) => void; notify: (text: string) => void }) {
   const [tab, setTab] = useState<"overview" | "plan" | "history" | "progress" | "checkins" | "notes">("overview");
+  useScrollTopOnChange(tab);
   const [note, setNote] = useState("");
   const activePlan = planForClient(client.id, plans);
   const realisation = weeklyRealisation(client.id, plans, history, now);
@@ -2363,6 +2414,7 @@ function PlansView({ clients, workoutPlans, planTemplates, onSaveTemplate, onDel
   const [wizardPath, setWizardPath] = useState<PlanPath | null>(null);
   const [editingPlan, setEditingPlan] = useState<TrainingProgram | null>(() => initialPlanId ? workoutPlans.find((plan) => plan.id === initialPlanId) ?? null : null);
   // Okno "co zrobić z planem": zapisz jako szablon albo skopiuj do innej osoby.
+  useScrollTopOnChange(editingPlan?.id ?? "lista");
   const [planAction, setPlanAction] = useState<{ plan: TrainingProgram; mode: "template" | "copy" } | null>(null);
   const [assigningTemplate, setAssigningTemplate] = useState<PlanTemplate | null>(null);
 
@@ -3217,6 +3269,7 @@ function ClientPortal({
   now: Date;
 }) {
   const [tab, setTab] = useState<"today" | "plan" | "diet" | "progress" | "profile">("today");
+  useScrollTopOnChange(tab);
   const [activeWorkoutDayId, setActiveWorkoutDayId] = useState<string | null>(null);
   const clientAttendance = attendanceFor(client.id, appointments, history, now);
   const dietTargets = dietPlan ? calculateTargets(dietPlan.profile) : null;

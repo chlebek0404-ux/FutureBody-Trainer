@@ -4,6 +4,7 @@ import { ChevronRight, Heart, Plus, Search, SlidersHorizontal, X } from "lucide-
 import { useMemo, useState } from "react";
 
 import MuscleMap from "@/components/muscle-map";
+import { useScrollTopOnChange } from "@/lib/use-scroll-top";
 import {
   categoryCounts,
   equipmentGroups,
@@ -48,6 +49,9 @@ export default function ExerciseLibrary({ onAddToPlan }: { onAddToPlan?: (exerci
   const [scope, setScope] = useState<"all" | "favourites" | "recents">("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<ExerciseRecord | null>(null);
+
+  // Zmiana zakładki albo filtru daje inną listę, więc wracamy na jej początek.
+  useScrollTopOnChange(`${scope}|${quick}|${category}`);
 
   const counts = useMemo(() => categoryCounts(), []);
 
