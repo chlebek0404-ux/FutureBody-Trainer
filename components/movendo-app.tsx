@@ -1128,7 +1128,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
         </div>
         {previewMode ? <p className="mb-2 rounded-[14px] border border-dashed border-[#ffc400]/35 bg-[#ffc400]/[0.07] px-3 py-2 text-[9px] font-black uppercase tracking-[0.11em] text-[#ffc400]">Tryb podglądu · dane tylko do recenzji</p> : null}
         <div className="rounded-[18px] border border-white/[0.07] bg-[#111214] p-3">
-          <div className="flex items-center gap-3"><Avatar initials={profileInitials(trainerProfile)} size="sm" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{trainerProfile.fullName || "Konto trenera"}</p><p className="truncate text-[9px] text-white/35">{previewMode ? "Konto podglądu" : "Trener"}</p></div><button onClick={logout} className="text-white/35 hover:text-white" aria-label="Wyloguj"><LogOut size={16} /></button></div>
+          <div className="flex items-center gap-3"><Avatar initials={profileInitials(trainerProfile)} size="sm" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{trainerProfile.fullName || "Konto trenera"}</p><p className="truncate text-[9px] text-white/35">{previewMode ? "Konto podglądu" : "Trener"}</p></div><button onClick={logout} className="-my-3 py-3 text-white/35 hover:text-white" aria-label="Wyloguj"><LogOut size={16} /></button></div>
         </div>
       </aside>
 
@@ -1261,7 +1261,7 @@ function ViewRenderer(props: {
   onSaveNutrition: (plan: NutritionPlan) => void; onDeleteNutrition: (clientId: string) => void;
 }) {
   switch (props.view) {
-    case "dashboard": return <Dashboard now={props.now} clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
+    case "dashboard": return <Dashboard now={props.now} clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} workoutHistory={props.workoutHistory} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
     case "clients": return <ClientsView clients={props.clients} query={props.query} onClient={props.onClient} onAdd={() => props.onModal("client")} />;
     case "calendar": return <CalendarView clients={props.clients} appointments={props.appointments} onSchedule={props.onSchedule} onOpenClient={props.onClient} onStartWorkout={props.onStartWorkout} onCancel={props.onCancelAppointment} onDelete={props.onDeleteAppointment} autoSchedule={props.calendarIntent} />;
     case "plans": return <PlansView clients={props.clients} workoutPlans={props.workoutPlans} initialPlanId={props.selectedPlanId} onOpenDetail={props.onOpenPlan} onCloseDetail={() => props.onNavigate("plans")} onSavePlan={props.onSavePlan} onUpdatePlan={props.onUpdatePlan} notify={props.notify} planIntentClientId={props.planIntentClientId} />;
@@ -1278,7 +1278,7 @@ function ViewRenderer(props: {
   }
 }
 
-function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { now: Date; clients: Client[]; appointments: CalendarAppointment[]; nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
+function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, workoutHistory, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { now: Date; clients: Client[]; appointments: CalendarAppointment[]; nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; workoutHistory: WorkoutCompletion[]; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
   const today = appointments.filter((item) => item.date === dateKey(now)).sort((a, b) => a.hour - b.hour);
   const nextAppointment = today.find((item) => item.hour >= now.getHours()) ?? today[0];
   const nextClient = nextAppointment ? clients.find((client) => client.id === nextAppointment.clientId) ?? null : null;
@@ -1295,6 +1295,131 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
   const hour = now.getHours();
   const greeting = hour < 5 ? "Dobrej nocy." : hour < 12 ? "Dzień dobry." : hour < 18 ? "Dobre popołudnie." : "Dobry wieczór.";
   const dateLabel = new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long" }).format(now);
+  const clock = new Intl.DateTimeFormat("pl-PL", { hour: "2-digit", minute: "2-digit" }).format(now);
+
+  // Tydzień: liczba terminów na każdy dzień, licząc od poniedziałku.
+  const weekStart = startOfWeek(now);
+  const week = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+    const key = dateKey(date);
+    return {
+      key,
+      label: new Intl.DateTimeFormat("pl-PL", { weekday: "short" }).format(date).replace(".", ""),
+      dayNumber: date.getDate(),
+      count: appointments.filter((item) => item.date === key).length,
+      isToday: key === dateKey(now),
+      isPast: key < dateKey(now),
+    };
+  });
+  const weekTotal = week.reduce((total, day) => total + day.count, 0);
+  const weekDone = workoutHistory.filter((entry) => {
+    const key = entry.completedAt.slice(0, 10);
+    return key >= week[0].key && key <= week[6].key;
+  }).length;
+
+  // Oś dnia obejmuje tylko godziny, w których faktycznie coś się dzieje.
+  const dayStart = Math.min(7, ...today.map((item) => item.hour), hour);
+  const dayEnd = Math.max(20, ...today.map((item) => item.hour + 1), hour + 1);
+  const nowOffset = ((hour + now.getMinutes() / 60 - dayStart) / (dayEnd - dayStart)) * 100;
+
+  /**
+   * Sygnały wymagające reakcji trenera.
+   *
+   * Każdy z nich wynika wprost z zapisanych danych — terminu, który minął bez
+   * zapisanego treningu, historii serii albo braku planu. Pulpit nie zgaduje
+   * i nie pokazuje niczego, czego nie da się potwierdzić w aplikacji.
+   *
+   * `weight` ustala kolejność: najpierw rzeczy pilne, na końcu pochwały.
+   */
+  const attention: { id: string; title: string; detail: string; action: () => void; cta: string; tone: "alert" | "todo" | "good"; weight: number }[] = [];
+  const todayString = dateKey(now);
+
+  for (const client of clients) {
+    const history = workoutHistory
+      .filter((entry) => entry.clientId === client.id)
+      .sort((a, b) => a.completedAt.localeCompare(b.completedAt));
+    const lastEntry = history[history.length - 1];
+
+    // Termin minął, a treningu nikt nie zapisał.
+    const missed = appointments.filter((item) => {
+      if (item.clientId !== client.id || item.status === "Anulowany") return false;
+      const isPast = item.date < todayString || (item.date === todayString && item.hour + 1 <= hour);
+      if (!isPast) return false;
+      return !history.some((entry) => entry.completedAt.slice(0, 10) === item.date);
+    });
+    if (missed.length) {
+      const latest = missed[missed.length - 1];
+      attention.push({
+        id: `missed-${client.id}`,
+        title: client.name,
+        detail: missed.length === 1 ? `Trening z ${formatCalendarDate(latest.date)} bez zapisanego wyniku` : `${missed.length} treningi bez zapisanego wyniku`,
+        cta: "Otwórz profil",
+        action: () => onClient(client.id),
+        tone: "alert",
+        weight: 0,
+      });
+    }
+
+    // Cisza dłuższa niż tydzień przy aktywnej współpracy.
+    if (client.status === "Aktywny" && lastEntry) {
+      const days = Math.floor((now.getTime() - new Date(lastEntry.completedAt).getTime()) / 86_400_000);
+      if (days >= 7) {
+        attention.push({
+          id: `idle-${client.id}`,
+          title: client.name,
+          detail: `Bez zapisanego treningu od ${days} dni`,
+          cta: "Otwórz profil",
+          action: () => onClient(client.id),
+          tone: "alert",
+          weight: 1,
+        });
+      }
+    }
+
+    // Rekord: ostatnia sesja pobiła najlepszy dotychczasowy ciężar w danym ćwiczeniu.
+    if (lastEntry) {
+      const bestBefore = new Map<string, number>();
+      for (const entry of history.slice(0, -1)) {
+        for (const result of entry.results) {
+          for (const set of result.sets) {
+            const load = Number.parseFloat(set.load.replace(",", "."));
+            if (!set.completed || !Number.isFinite(load)) continue;
+            bestBefore.set(result.exerciseId, Math.max(bestBefore.get(result.exerciseId) ?? 0, load));
+          }
+        }
+      }
+      for (const result of lastEntry.results) {
+        const previous = bestBefore.get(result.exerciseId);
+        if (previous === undefined) continue;
+        const best = Math.max(...result.sets.filter((set) => set.completed).map((set) => Number.parseFloat(set.load.replace(",", "."))).filter(Number.isFinite), 0);
+        if (best > previous) {
+          const exercise = exerciseLibrary.find((item) => item.id === result.exerciseId);
+          attention.push({
+            id: `record-${client.id}-${result.exerciseId}`,
+            title: client.name,
+            detail: `Nowy rekord: ${exercise?.name ?? "ćwiczenie"} ${best} kg (poprzednio ${previous} kg)`,
+            cta: "Zobacz postęp",
+            action: () => onClient(client.id),
+            tone: "good",
+            weight: 4,
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  for (const client of clientsWithoutPlan) {
+    attention.push({ id: `plan-${client.id}`, title: client.name, detail: "Brak planu treningowego", cta: "Utwórz plan", action: () => onClient(client.id), tone: "todo", weight: 2 });
+  }
+  for (const client of clientsWithoutDiet) {
+    attention.push({ id: `diet-${client.id}`, title: client.name, detail: "Brak planu żywieniowego", cta: "Ustaw dietę", action: () => onNavigate("nutrition"), tone: "todo", weight: 3 });
+  }
+  for (const client of clients.filter((item) => item.status === "Do kontaktu")) {
+    attention.push({ id: `contact-${client.id}`, title: client.name, detail: "Oznaczony do kontaktu", cta: "Otwórz profil", action: () => onClient(client.id), tone: "todo", weight: 2 });
+  }
+  attention.sort((a, b) => a.weight - b.weight);
 
   const stats: { label: string; value: string; hint?: string }[] = [
     { label: "Treningi dziś", value: String(today.length) },
@@ -1309,7 +1434,11 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
       {/* Hero: dzień, najbliższy trening i akcja główna w jednym kadrze. */}
       <section className="fb-panel relative overflow-hidden p-6 sm:p-8 lg:p-10">
         <div className="relative">
-          <p className="fb-label">{dateLabel}</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p className="fb-label">{dateLabel}</p>
+            <span className="h-1 w-1 rounded-full bg-[var(--fb-text-muted)]" aria-hidden="true" />
+            <p className="fb-label tabular-nums text-[var(--fb-gold)]">{clock}</p>
+          </div>
           <h1 className="mt-3 text-[clamp(1.9rem,6vw,2.6rem)] font-black leading-[1.02] tracking-[-0.05em]">{greeting}</h1>
           <p className="mt-3 max-w-md text-sm leading-6 text-[var(--fb-text-secondary)]">
             {today.length
@@ -1352,6 +1481,39 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
         ))}
       </section>
 
+      {/* Tydzień: gdzie jesteśmy i ile zostało. */}
+      <section className="fb-card mt-4 p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-black tracking-[-0.02em]">Ten tydzień</h2>
+          <p className="text-[11px] text-[var(--fb-text-muted)]">
+            {weekTotal ? `${weekDone} z ${weekTotal} zapisanych treningów` : "Brak terminów w tym tygodniu"}
+          </p>
+        </div>
+        {weekTotal ? (
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--fb-inset)]">
+            <div className="h-full rounded-full bg-[var(--fb-gold)] transition-all duration-500" style={{ width: `${Math.min(100, Math.round((weekDone / weekTotal) * 100))}%` }} />
+          </div>
+        ) : null}
+        <div className="mt-4 grid grid-cols-7 gap-1.5">
+          {week.map((day) => (
+            <button
+              key={day.key}
+              onClick={() => onNavigate("calendar")}
+              aria-label={`${day.label} ${day.dayNumber}: ${day.count} ${day.count === 1 ? "trening" : "treningów"}`}
+              className={`flex min-h-[68px] flex-col items-center justify-center gap-1 rounded-2xl border p-1 transition ${day.isToday ? "border-[var(--fb-gold)] bg-[color-mix(in_srgb,var(--fb-gold)_12%,transparent)]" : "border-[var(--fb-border)] hover:bg-[var(--fb-inset)]"} ${day.isPast && !day.isToday ? "opacity-45" : ""}`}
+            >
+              <span className="text-[9px] font-black uppercase tracking-wider text-[var(--fb-text-muted)]">{day.label}</span>
+              <span className={`text-sm font-black tabular-nums ${day.isToday ? "text-[var(--fb-gold)]" : ""}`}>{day.dayNumber}</span>
+              <span className="flex h-2 items-center gap-0.5">
+                {Array.from({ length: Math.min(day.count, 4) }, (_, index) => (
+                  <span key={index} className={`h-1.5 w-1.5 rounded-full ${day.isToday ? "bg-[var(--fb-gold)]" : "bg-[var(--fb-text-muted)]"}`} />
+                ))}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.4fr_.6fr]">
         {/* Harmonogram dnia. */}
         <section className="fb-card overflow-hidden">
@@ -1362,6 +1524,34 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
             </div>
             <button onClick={() => onNavigate("calendar")} className="fb-btn fb-btn-ghost !min-h-11 !px-4">Kalendarz</button>
           </div>
+
+          {/* Oś dnia: gdzie jesteśmy i co jeszcze przed nami. */}
+          {today.length ? (
+            <div className="border-b border-[var(--fb-border)] px-5 pb-5 pt-4">
+              <div className="relative h-9 rounded-full bg-[var(--fb-inset)]">
+                {today.map((item) => {
+                  const left = ((item.hour - dayStart) / (dayEnd - dayStart)) * 100;
+                  const width = (1 / (dayEnd - dayStart)) * 100;
+                  const done = item.hour + 1 <= hour;
+                  return (
+                    <span
+                      key={item.id}
+                      title={`${String(item.hour).padStart(2, "0")}:00`}
+                      className={`absolute top-1.5 bottom-1.5 rounded-full ${done ? "bg-[var(--fb-text-muted)]/45" : "bg-[var(--fb-gold)]"}`}
+                      style={{ left: `${left}%`, width: `${width}%` }}
+                    />
+                  );
+                })}
+                <span className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-[var(--fb-text-primary)]" style={{ left: `${Math.max(0, Math.min(100, nowOffset))}%` }} aria-hidden="true" />
+              </div>
+              <div className="mt-1.5 flex justify-between text-[9px] font-black tabular-nums text-[var(--fb-text-muted)]">
+                <span>{String(dayStart).padStart(2, "0")}:00</span>
+                <span>teraz {clock}</span>
+                <span>{String(dayEnd).padStart(2, "0")}:00</span>
+              </div>
+            </div>
+          ) : null}
+
           {today.length ? (
             <div className="divide-y divide-[var(--fb-border)]">
               {today.map((item) => {
@@ -1375,7 +1565,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
                     </span>
                     <Avatar initials={client.initials} size="sm" />
                     <span className="min-w-0 flex-1">
-                      <button onClick={() => onClient(client.id)} className="block max-w-full truncate text-left text-sm font-black hover:underline">{client.name}</button>
+                      <button onClick={() => onClient(client.id)} className="-my-2.5 block max-w-full truncate py-2.5 text-left text-sm font-black hover:underline">{client.name}</button>
                       <span className="mt-0.5 block truncate text-[10px] text-[var(--fb-text-muted)]">{client.plan}</span>
                     </span>
                     <button onClick={() => onStartWorkout(client.id)} className="fb-btn fb-btn-primary !min-h-11 !px-5">Start</button>
@@ -1389,6 +1579,46 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
               <p className="mt-3 text-sm font-black">Wolny dzień</p>
               <p className="mt-1 text-[11px] text-[var(--fb-text-muted)]">Nie masz dziś zaplanowanych treningów.</p>
               <button onClick={onAddWorkout} className="fb-btn fb-btn-primary mx-auto mt-5">Zaplanuj trening</button>
+            </div>
+          )}
+        </section>
+
+        <div className="grid gap-4">
+        {/* Sygnały wyliczone z zapisanych danych. */}
+        <section className="fb-card overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--fb-border)] p-5">
+            <div>
+              <h2 className="text-base font-black tracking-[-0.02em]">Wymaga uwagi</h2>
+              <p className="mt-0.5 text-[11px] text-[var(--fb-text-muted)]">Wyliczone z planów, terminów i historii</p>
+            </div>
+            {attention.length ? <span className="grid h-7 min-w-7 shrink-0 place-items-center rounded-full bg-[var(--fb-gold)] px-2 text-[11px] font-black text-[#0c0c0f]">{attention.length}</span> : null}
+          </div>
+          {attention.length ? (
+            <div className="divide-y divide-[var(--fb-border)]">
+              {attention.slice(0, 6).map((item) => (
+                <button key={item.id} onClick={item.action} className="flex w-full items-center gap-3 p-4 text-left transition hover:bg-[var(--fb-inset)] sm:px-5">
+                  <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${item.tone === "alert" ? "bg-red-500" : item.tone === "good" ? "bg-emerald-500" : "bg-[var(--fb-gold)]"}`} aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-black">{item.title}</span>
+                    <span className="mt-0.5 block truncate text-[11px] text-[var(--fb-text-muted)]">{item.detail}</span>
+                  </span>
+                  <span className="shrink-0 text-[9px] font-black uppercase tracking-wider text-[var(--fb-text-muted)]">{item.cta}</span>
+                  <ChevronRight size={15} className="shrink-0 text-[var(--fb-text-muted)]" />
+                </button>
+              ))}
+              {attention.length > 6 ? (
+                <button onClick={() => onNavigate("clients")} className="w-full p-4 text-center text-[10px] font-black uppercase tracking-wider text-[var(--fb-gold)]">
+                  Pokaż wszystkich podopiecznych ({attention.length - 6} więcej)
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="p-8 text-center">
+              <CheckCircle2 size={22} className="mx-auto text-emerald-500" />
+              <p className="mt-3 text-sm font-black">Wszystko domknięte</p>
+              <p className="mt-1 text-[11px] text-[var(--fb-text-muted)]">
+                {clients.length ? "Każdy podopieczny ma plan, dietę i zapisane treningi." : "Dodaj pierwszego podopiecznego, żeby zobaczyć tu sygnały."}
+              </p>
             </div>
           )}
         </section>
@@ -1413,6 +1643,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, onMod
             );
           })}
         </section>
+        </div>
       </div>
     </>
   );
