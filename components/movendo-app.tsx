@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Apple, ArrowDown, ArrowUp, BarChart3, Bell, BookmarkPlus, BookOpen, CalendarDays, CalendarPlus, Check, CheckCircle2, CheckSquare, ChevronLeft, ChevronRight, Copy, Download, Dumbbell, Eye, EyeOff, FileText, Filter, FolderOpen, LayoutDashboard, Library, LockKeyhole, LogOut, Mail, Menu, Monitor, Moon, MoreHorizontal, Phone, Plus, Search, Settings, ShieldCheck, Sparkles, Sun, Trash2, TrendingUp, type LucideIcon, Upload, UserPlus, Users, X, Zap } from "lucide-react";
+import { Activity, Apple, ArrowDown, ArrowUp, BarChart3, Bell, BookmarkPlus, BookOpen, CalendarDays, CalendarPlus, Check, CheckCircle2, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Dumbbell, Eye, EyeOff, FileText, Filter, FolderOpen, LayoutDashboard, Library, LockKeyhole, LogOut, Mail, Menu, Monitor, Moon, MoreHorizontal, Phone, Plus, Search, Settings, ShieldCheck, Sparkles, Sun, Trash2, TrendingUp, type LucideIcon, Upload, UserPlus, Users, X, Zap } from "lucide-react";
 import {
   automations,
   initialTasks,
@@ -22,6 +22,8 @@ import { ClientWorkout } from "@/components/client-workout";
 import { exerciseLibrary, pluralExercises, searchExercises, suggestExercises } from "@/lib/exercises";
 import { currentWeekKey, findCheckin, checkinScore, type CheckinRecord } from "@/lib/checkins";
 import { copyPlanToClient, createPlanFromTemplate, createTemplateFromPlan, templateSummary, type PlanTemplate } from "@/lib/plan-templates";
+import { availableMetrics, formatValue, metricDefinitions, metricSeries, metricSummary, plural, readMetric as readMetricValue, type MetricId } from "@/lib/measurements";
+import MeasurementChart from "@/components/measurement-chart";
 import { createTrainingDays, createTrainingDaysFromPlan, createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { enableSmoothWheelScroll } from "@/lib/smooth-scroll";
@@ -758,9 +760,17 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     if (!clientId) { notify("Wskaż podopiecznego."); return; }
     const weight = (payload.weight ?? "").trim();
     const bodyFat = (payload.bodyfat ?? "").trim();
-    if (!weight && !bodyFat) { notify("Podaj masę ciała albo tkankę tłuszczową."); return; }
-    const date = new Intl.DateTimeFormat("pl-PL").format(new Date());
-    setMeasurements((current) => [{ id: `m${Date.now()}`, clientId, date, weight, bodyFat, note: (payload.note ?? "").trim() }, ...current]);
+    const anyCircumference = metricDefinitions.some((metric) => metric.group === "Obwody" && (payload[metric.id] ?? "").trim());
+    if (!weight && !bodyFat && !anyCircumference) { notify("Podaj masę ciała, tkankę tłuszczową albo choć jeden obwód."); return; }
+    const now = new Date();
+    const date = new Intl.DateTimeFormat("pl-PL").format(now);
+    const circumferences: Partial<Record<MetricId, string>> = {};
+    for (const metric of metricDefinitions) {
+      if (metric.group !== "Obwody") continue;
+      const value = (payload[metric.id] ?? "").trim();
+      if (value) circumferences[metric.id] = value;
+    }
+    setMeasurements((current) => [{ id: `m${Date.now()}`, clientId, date, measuredAt: now.toISOString(), weight, bodyFat, note: (payload.note ?? "").trim(), circumferences }, ...current]);
     setClients((current) => current.map((client) => client.id === clientId
       ? { ...client, weight: weight ? `${weight} kg` : client.weight, bodyFat: bodyFat ? `${bodyFat}%` : client.bodyFat, lastCheckin: `Pomiar ${date}` }
       : client));
@@ -1626,7 +1636,7 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, worko
                     />
                   );
                 })}
-                <span className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-[var(--fb-text-primary)]" style={{ left: `${Math.max(0, Math.min(100, nowOffset))}%` }} aria-hidden="true" />
+                <span className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-[var(--fb-text)]" style={{ left: `${Math.max(0, Math.min(100, nowOffset))}%` }} aria-hidden="true" />
               </div>
               <div className="mt-1.5 flex justify-between text-[9px] font-black tabular-nums text-[var(--fb-text-muted)]">
                 <span>{String(dayStart).padStart(2, "0")}:00</span>
@@ -1742,6 +1752,115 @@ function ClientsView({ clients, query, onClient, onAdd }: { clients: Client[]; q
 }
 
 
+/**
+ * Postępy sylwetki: wybór miary, wykres zmiany i pełna tabela pomiarów.
+ *
+ * Wykres pokazuje jedną miarę naraz. Masa, obwody i procent tkanki mają różne
+ * jednostki i skale — narysowane razem wymagałyby drugiej osi i wprowadzałyby
+ * w błąd. Tabela pod wykresem podaje wszystkie zapisane liczby, więc odczyt
+ * nie zależy wyłącznie od koloru linii.
+ */
+function MeasurementProgress({ client, measurements, onAddMeasurement }: { client: Client; measurements: Measurement[]; onAddMeasurement: () => void }) {
+  const metrics = availableMetrics(measurements);
+  const [metricId, setMetricId] = useState<MetricId | null>(null);
+  const active = metrics.find((metric) => metric.id === metricId) ?? metrics[0] ?? null;
+  const series = active ? metricSeries(measurements, active.id) : [];
+  const summary = active ? metricSummary(measurements, active) : null;
+
+  return (
+    <section className={`${cardClass} p-5 sm:p-7`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-black">Postępy podopiecznego</h2>
+          <p className="text-[10px] text-black/36">Masa, tkanka tłuszczowa i obwody z zapisanych pomiarów</p>
+        </div>
+        <button onClick={onAddMeasurement} className="h-11 rounded-full bg-black px-4 text-[9px] font-black uppercase tracking-wider text-white">Dodaj pomiar</button>
+      </div>
+
+      {metrics.length ? (
+        <>
+          <div className="fb-scroll-x mt-5 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+            {metrics.map((metric) => {
+              const isActive = active?.id === metric.id;
+              return (
+                <button key={metric.id} onClick={() => setMetricId(metric.id)} aria-pressed={isActive}
+                  className={`h-11 shrink-0 rounded-full border px-4 text-[11px] font-black transition ${isActive ? "border-black bg-black text-white" : "border-black/10 bg-white"}`}>
+                  {metric.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {summary ? (
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                ["Ostatni pomiar", `${formatValue(summary.last.value)} ${active!.unit}`],
+                ["Pierwszy pomiar", `${formatValue(summary.first.value)} ${active!.unit}`],
+                ["Zmiana", summary.points > 1 ? `${summary.change > 0 ? "+" : summary.change < 0 ? "−" : ""}${formatValue(Math.abs(summary.change))} ${active!.unit}` : "—"],
+                [`Zapisane ${plural(summary.points, "pomiar", "pomiary", "pomiary")}`, String(summary.points)],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4">
+                  <p className="text-[8px] font-black uppercase text-black/30">{label}</p>
+                  <p className="mt-2 text-lg font-black">{value}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {active ? (
+            <div className="mt-6">
+              <h3 className="mb-3 text-[10px] font-black uppercase tracking-wider text-black/32">{active.label} w czasie</h3>
+              <MeasurementChart metric={active} series={series} />
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <p className="mt-5 rounded-2xl border border-dashed border-black/10 px-4 py-10 text-center text-xs text-black/38">
+          Brak zapisanych pomiarów dla: {client.name}. Dodaj pierwszy, żeby zobaczyć wykres zmian.
+        </p>
+      )}
+
+      <div className="mt-7">
+        <h3 className="text-[10px] font-black uppercase tracking-wider text-black/32">Historia pomiarów</h3>
+        {measurements.length ? (
+          <div className="fb-scroll-x mt-3 overflow-x-auto">
+            <table className="w-full min-w-[520px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-black/[0.08]">
+                  <th scope="col" className="py-2 pr-3 text-[9px] font-black uppercase tracking-wider text-black/32">Data</th>
+                  {metricDefinitions.filter((metric) => measurements.some((entry) => readMetricValue(entry, metric.id) !== null)).map((metric) => (
+                    <th key={metric.id} scope="col" className="py-2 pr-3 text-right text-[9px] font-black uppercase tracking-wider text-black/32">{metric.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {measurements.map((entry) => (
+                  <tr key={entry.id} className="border-b border-black/[0.045] last:border-0">
+                    <th scope="row" className="py-2.5 pr-3 text-xs font-black tabular-nums">{entry.date}</th>
+                    {metricDefinitions.filter((metric) => measurements.some((item) => readMetricValue(item, metric.id) !== null)).map((metric) => {
+                      const value = readMetricValue(entry, metric.id);
+                      return <td key={metric.id} className="py-2.5 pr-3 text-right text-xs font-bold tabular-nums">{value === null ? <span className="text-black/22">—</span> : formatValue(value)}</td>;
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-3 rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-xs text-black/38">Brak zapisanych pomiarów.</p>
+        )}
+        {measurements.some((entry) => entry.note) ? (
+          <div className="mt-4 space-y-2">
+            {measurements.filter((entry) => entry.note).slice(0, 5).map((entry) => (
+              <p key={entry.id} className="text-[11px] leading-5 text-black/45"><strong className="font-black text-black/70">{entry.date}:</strong> {entry.note}</p>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function ClientProfile({ client, invitation, measurements, onBack, onAction, onCreatePlan, onOpenCalendar, onOpenPlan, onStartWorkout, onNewInvitation, onCopy, notify }: { client: Client; invitation?: ClientInvitation; measurements: Measurement[]; onBack: () => void; onAction: (type: ModalType) => void; onCreatePlan: () => void; onOpenCalendar: () => void; onOpenPlan: () => void; onStartWorkout: () => void; onNewInvitation: () => void; onCopy: (value: string, label: string) => void; notify: (text: string) => void }) {
   const [tab, setTab] = useState<"overview" | "plan" | "history" | "progress" | "notes">("overview");
   const [note, setNote] = useState("");
@@ -1765,7 +1884,7 @@ function ClientProfile({ client, invitation, measurements, onBack, onAction, onC
 
     {tab === "history" ? <section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] p-5"><h2 className="font-black">Historia treningów</h2><p className="text-[10px] text-black/36">Ostatnie zapisane aktywności podopiecznego</p></div>{["Ostatni trening", "Tydzień temu", "Dwa tygodnie temu"].map((date, index) => <div key={date} className="flex min-h-16 items-center gap-3 border-b border-black/[0.055] px-5 py-3 last:border-0"><span className="grid h-9 w-9 place-items-center rounded-full bg-black text-white"><CheckCircle2 size={15}/></span><span className="min-w-0 flex-1"><span className="block text-xs font-black">{client.plan}</span><span className="block text-[9px] text-black/36">{date} · {index === 0 ? "Trening zapisany" : "Zrealizowany"}</span></span><ChevronRight size={14}/></div>)}</section> : null}
 
-    {tab === "progress" ? <section className={`${cardClass} p-5 sm:p-7`}><div className="flex items-center justify-between"><div><h2 className="font-black">Postępy podopiecznego</h2><p className="text-[10px] text-black/36">Pomiary i realizacja planu</p></div><button onClick={() => onAction("measurement")} className="h-10 rounded-full bg-black px-4 text-[9px] font-black uppercase text-white">Dodaj pomiar</button></div><div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Realizacja", `${client.progress}%`], ["Masa", client.weight], ["Tkanka tłuszczowa", client.bodyFat], ["Frekwencja", client.attendance]].map(([label, value]) => <div key={label} className="rounded-2xl bg-[#f3f3f1] p-4"><p className="text-[8px] font-black uppercase text-black/30">{label}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}</div><div className="mt-7"><h3 className="text-[10px] font-black uppercase tracking-wider text-black/32">Historia pomiarów</h3>{measurements.length ? <div className="mt-3 divide-y divide-black/[0.055]">{measurements.slice(0, 8).map((entry) => <div key={entry.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3"><span className="w-24 shrink-0 text-xs font-black tabular-nums">{entry.date}</span><span className="text-xs font-bold">{entry.weight ? `${entry.weight} kg` : "—"}</span><span className="text-xs text-black/45">{entry.bodyFat ? `${entry.bodyFat}% tkanki` : ""}</span>{entry.note ? <span className="w-full text-[10px] leading-4 text-black/38">{entry.note}</span> : null}</div>)}</div> : <p className="mt-3 rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-xs text-black/38">Brak zapisanych pomiarów. Dodaj pierwszy, aby zobaczyć historię.</p>}</div></section> : null}
+    {tab === "progress" ? <MeasurementProgress client={client} measurements={measurements} onAddMeasurement={() => onAction("measurement")} /> : null}
 
     {tab === "notes" ? <section className={`${cardClass} p-5 sm:p-7`}><h2 className="font-black">Notatki trenera</h2><p className="mt-1 text-[10px] text-black/36">Prywatne informacje dotyczące współpracy i kolejnych kroków.</p><textarea value={note} onChange={(event) => setNote(event.target.value)} className="mt-5 min-h-40 w-full rounded-2xl bg-[#f3f3f1] p-4 text-sm outline-none" placeholder="Dodaj obserwacje, ustalenia lub plan działania…"/><button onClick={() => notify("Notatka podopiecznego została zapisana")} disabled={!note.trim()} className="mt-4 h-11 rounded-full bg-black px-5 text-[9px] font-black uppercase text-white disabled:opacity-35">Zapisz notatkę</button></section> : null}
   </>;
@@ -3084,6 +3203,9 @@ function ActionModal({ type, clients, presetClient, onClose, onSave }: {
     measurement: ["Nowy pomiar", presetClient ? `Zapiszemy w profilu: ${presetClient.name}.` : "Wybierz podopiecznego i zapisz wyniki."],
   };
   const [form, setForm] = useState<Record<string, string>>(type === "client" ? { goal: trainingGoals[0] } : {});
+  const [circumferencesOpen, setCircumferencesOpen] = useState(false);
+  const circumferenceMetrics = metricDefinitions.filter((metric) => metric.group === "Obwody");
+  const filledCircumferences = circumferenceMetrics.filter((metric) => (form[metric.id] ?? "").trim()).length;
   // W profilu podopiecznego adresat jest znany, więc nie pytamy o niego ponownie.
   const [clientId, setClientId] = useState(presetClient?.id ?? "");
 
@@ -3147,6 +3269,38 @@ function ActionModal({ type, clients, presetClient, onClose, onSave }: {
                   </button>
                 ))}
               </div>
+            </div>
+          ) : null}
+
+          {type === "measurement" ? (
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={() => setCircumferencesOpen((current) => !current)}
+                aria-expanded={circumferencesOpen}
+                className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-[#f2f2f0] px-3.5 text-[11px] font-black"
+              >
+                <span>Obwody ciała{filledCircumferences ? ` · ${filledCircumferences} uzupełnione` : " · opcjonalne"}</span>
+                <ChevronDown size={15} className={`shrink-0 transition-transform ${circumferencesOpen ? "rotate-180" : ""}`} />
+              </button>
+              {circumferencesOpen ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {circumferenceMetrics.map((metric) => (
+                    <label key={metric.id}>
+                      <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-black/32">{metric.label} ({metric.unit})</span>
+                      <input
+                        value={form[metric.id] ?? ""}
+                        onChange={(event) => setForm((current) => ({ ...current, [metric.id]: event.target.value.replace(/[^\d,.]/g, "").slice(0, 6) }))}
+                        inputMode="decimal"
+                        placeholder="—"
+                        title={metric.hint}
+                        className="h-12 w-full rounded-xl border-0 bg-[#f2f2f0] px-3.5 text-base outline-none sm:text-sm"
+                      />
+                      <span className="mt-1 block text-[9px] leading-4 text-black/32">{metric.hint}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
 

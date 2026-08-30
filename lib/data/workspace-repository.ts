@@ -14,6 +14,7 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 
 import type { CalendarAppointment, Client } from "@/lib/demo-data";
+import type { MetricId } from "@/lib/measurements";
 import {
   appointmentStatusToLabel,
   clientStatusToLabel,
@@ -27,10 +28,15 @@ import {
 export type Measurement = {
   id: string;
   clientId: string;
+  /** Data w zapisie polskim, do wyświetlenia. */
   date: string;
+  /** Moment pomiaru w ISO — używany do sortowania i wykresów. */
+  measuredAt?: string;
   weight: string;
   bodyFat: string;
   note: string;
+  /** Obwody ciała w centymetrach; brak klucza znaczy „nie mierzono”. */
+  circumferences?: Partial<Record<MetricId, string>>;
 };
 
 const clientColumns =
@@ -97,6 +103,7 @@ export function mapMeasurement(row: MeasurementRow): Measurement {
     id: row.id,
     clientId: row.client_id,
     date: formatDate(row.measured_at),
+    measuredAt: row.measured_at ?? undefined,
     weight: row.weight_kg === null ? "" : String(row.weight_kg),
     bodyFat: row.body_fat_percent === null ? "" : String(row.body_fat_percent),
     note: row.notes ?? "",

@@ -29,6 +29,7 @@
   --fb-gold: #ffc400;
   --fb-gold-highlight: #ffd21a;
   --fb-gold-dark: #d99f00;
+  --fb-chart-line: var(--fb-gold);
   --fb-glow: rgba(255, 196, 0, 0.22);
 
   --fb-text: #f2f2f0;
@@ -89,6 +90,10 @@
   --fb-text-secondary: #55555c;
   --fb-text-muted: #83838a;
   --fb-glow: rgba(255, 196, 0, 0.28);
+  /* Linia wykresu w jasnym motywie: czyste złoto ma na bieli 1,7:1 i znika.
+     Ciemniejszy stopień daje 2,3:1, a czytelność dopełniają podpis wartości
+     i tabela pod wykresem. */
+  --fb-chart-line: #b58400;
   --fb-success: #167a45;
   --fb-warning: #9a5c00;
   --fb-error: #b4232f;
