@@ -1,10 +1,9 @@
 "use client";
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Apple, ArrowDown, ArrowUp, BarChart3, Bell, BookOpen, CalendarDays, CalendarPlus, Check, CheckCircle2, CheckSquare, ChevronLeft, ChevronRight, Download, Dumbbell, Eye, EyeOff, FileText, Filter, Flame, FolderOpen, LayoutDashboard, Library, LockKeyhole, LogOut, Mail, Menu, Monitor, Moon, MoreHorizontal, Phone, Plus, Search, Settings, ShieldCheck, Sparkles, Sun, TrendingUp, type LucideIcon, Upload, UserPlus, Users, X, Zap } from "lucide-react";
+import { Activity, Apple, ArrowDown, ArrowUp, BarChart3, Bell, BookOpen, CalendarDays, CalendarPlus, Check, CheckCircle2, CheckSquare, ChevronLeft, ChevronRight, Download, Dumbbell, Eye, EyeOff, FileText, Filter, FolderOpen, LayoutDashboard, Library, LockKeyhole, LogOut, Mail, Menu, Monitor, Moon, MoreHorizontal, Phone, Plus, Search, Settings, ShieldCheck, Sparkles, Sun, TrendingUp, type LucideIcon, Upload, UserPlus, Users, X, Zap } from "lucide-react";
 import {
   automations,
-  checkins,
   initialTasks,
   materials,
   type CalendarAppointment,
@@ -14,11 +13,14 @@ import {
 } from "@/lib/demo-data";
 import ExerciseMotion from "@/components/exercise-motion";
 import ExerciseLibrary from "@/components/exercise-library/exercise-library";
+import CheckinsView from "@/components/checkins-view";
+import CheckinForm from "@/components/checkin-form";
 import { PlanEditor } from "@/components/training-plan";
 import { NutritionEditor, NutritionView } from "@/components/nutrition-plan";
 import { calculateTargets, complianceForDay, sumMeals, todayKey, type MealLog, type NutritionPlan } from "@/lib/nutrition";
 import { ClientWorkout } from "@/components/client-workout";
 import { exerciseLibrary, pluralExercises, searchExercises, suggestExercises } from "@/lib/exercises";
+import { currentWeekKey, findCheckin, checkinScore, type CheckinRecord } from "@/lib/checkins";
 import { createTrainingDays, createTrainingDaysFromPlan, createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { enableSmoothWheelScroll } from "@/lib/smooth-scroll";
@@ -449,6 +451,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
   const [tasks, setTasks] = useState<typeof initialTasks>(() => readStoredJson("futurebody_tasks", []));
   const [modal, setModal] = useState<{ type: ModalType; clientId?: string }>({ type: null });
   const [measurements, setMeasurements] = useState<Measurement[]>(() => readStoredJson("futurebody_measurements", []));
+  const [checkins, setCheckins] = useState<CheckinRecord[]>(() => readStoredJson("futurebody_checkins", []));
   const [planIntentClientId, setPlanIntentClientId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
@@ -633,6 +636,21 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.localStorage.setItem("movendo_calendar_history", JSON.stringify(appointments));
   }, [appointments]);
 
+  /** Trener oznacza check-in jako sprawdzony i zostawia notatkę dla podopiecznego. */
+  function reviewCheckin(id: string, trainerNote: string) {
+    setCheckins((current) => current.map((item) => item.id === id ? { ...item, trainerNote, reviewedAt: new Date().toISOString() } : item));
+    notify("Check-in oznaczony jako sprawdzony.");
+  }
+
+  /** Zapis check-inu podopiecznego. Jeden wpis na tydzień — ponowne wysłanie nadpisuje poprzedni. */
+  function submitCheckin(record: CheckinRecord) {
+    setCheckins((current) => {
+      const existing = current.find((item) => item.clientId === record.clientId && item.weekKey === record.weekKey);
+      return existing ? current.map((item) => item === existing ? { ...record, id: existing.id, trainerNote: existing.trainerNote } : item) : [...current, record];
+    });
+    notify("Check-in wysłany do trenera.");
+  }
+
   useEffect(() => {
     window.localStorage.setItem("futurebody_clients", JSON.stringify(clients));
     window.localStorage.setItem("futurebody_tasks", JSON.stringify(tasks));
@@ -642,7 +660,8 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
     window.localStorage.setItem("futurebody_nutrition_plans", JSON.stringify(nutritionPlans));
     window.localStorage.setItem("futurebody_meal_logs", JSON.stringify(mealLogs));
     window.localStorage.setItem("futurebody_measurements", JSON.stringify(measurements));
-  }, [clients, invitations, mealLogs, measurements, nutritionPlans, tasks, workoutHistory, workoutPlans]);
+    window.localStorage.setItem("futurebody_checkins", JSON.stringify(checkins));
+  }, [checkins, clients, invitations, mealLogs, measurements, nutritionPlans, tasks, workoutHistory, workoutPlans]);
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -1081,7 +1100,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
 
   if (booting) return <FutureBodySplash/>;
   if (!role) return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} onGoogleSignIn={signInWithGoogle} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
-  if (role === "client" && clientSession) return <ClientPortal client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} previewMode={previewMode} dietPlan={nutritionPlans.find((plan) => plan.clientId === clientSession.id)} mealLog={mealLogs.find((log) => log.clientId === clientSession.id && log.date === todayKey())} onToggleMeal={(mealId) => toggleMeal(clientSession.id, mealId)} />;
+  if (role === "client" && clientSession) return <ClientPortal checkins={checkins} onSubmitCheckin={submitCheckin} client={clientSession} program={workoutPlans.find((plan) => plan.clientId === clientSession.id)} completedWorkouts={workoutHistory.filter((entry) => entry.clientId === clientSession.id).length} onComplete={completeWorkout} onLogout={logout} notify={notify} previewMode={previewMode} dietPlan={nutritionPlans.find((plan) => plan.clientId === clientSession.id)} mealLog={mealLogs.find((log) => log.clientId === clientSession.id && log.date === todayKey())} onToggleMeal={(mealId) => toggleMeal(clientSession.id, mealId)} />;
   if (role === "client") return <LoginScreen initialCode={initialActivationCode} onLogin={login} onRegisterTrainer={registerTrainer} onResetPassword={resetPassword} onValidateCode={validateCode} onActivateClient={activateClient} onGoogleSignIn={signInWithGoogle} showPreviewAccounts={!isSupabaseConfigured() && isPreviewBuild()} />;
 
   return (
@@ -1176,7 +1195,7 @@ export default function MovendoApp({ initialActivationCode = "" }: { initialActi
               notify={notify}
             />
           ) : (
-            <ViewRenderer view={activeView} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} now={now} onAddWorkout={openScheduling} calendarIntent={calendarIntent} planIntentClientId={planIntentClientId} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={(type) => setModal({ type })} notify={notify} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
+            <ViewRenderer view={activeView} checkins={checkins} onReviewCheckin={reviewCheckin} clients={clients} setClients={setClients} query={query} onClient={openClient} onStartWorkout={startTrainerWorkout} onOpenPlan={openPlanById} onNavigate={navigate} now={now} onAddWorkout={openScheduling} calendarIntent={calendarIntent} planIntentClientId={planIntentClientId} nutritionPlans={nutritionPlans} mealLogs={mealLogs} nutritionClient={clients.find((client) => client.id === nutritionClientId) ?? null} onOpenNutrition={openNutrition} onCloseNutrition={() => setNutritionClientId(null)} onSaveNutrition={saveNutritionPlan} onDeleteNutrition={deleteNutritionPlan} selectedPlanId={selectedPlanId} tasks={tasks} setTasks={setTasks} onModal={(type) => setModal({ type })} notify={notify} appointments={appointments} onSchedule={scheduleAppointment} onCancelAppointment={cancelAppointment} onDeleteAppointment={deleteAppointment} workoutPlans={workoutPlans} workoutHistory={workoutHistory} onSavePlan={savePersonalPlan} onUpdatePlan={updateWorkoutPlan} onEnablePhoneNotifications={enablePhoneNotifications} themePreference={themePreference} onThemeChange={setThemePreference} profile={trainerProfile} onProfileChange={updateTrainerProfile} />
           )}
           </div>
         </main>
@@ -1253,7 +1272,7 @@ function ViewRenderer(props: {
   appointments: CalendarAppointment[]; onSchedule: (input: { id?: string; date: string; hour: number; clientId: string }) => void;
   onCancelAppointment: (id: string) => void; onDeleteAppointment: (id: string) => void;
   workoutPlans: TrainingProgram[]; onSavePlan: (plan: TrainingProgram, clientId: string) => void; onUpdatePlan: (plan: TrainingProgram) => void;
-  workoutHistory: WorkoutCompletion[]; onEnablePhoneNotifications: () => Promise<boolean>;
+  workoutHistory: WorkoutCompletion[]; checkins: CheckinRecord[]; onReviewCheckin: (id: string, note: string) => void; onEnablePhoneNotifications: () => Promise<boolean>;
   themePreference: ThemePreference; onThemeChange: (theme: ThemePreference) => void;
   profile: TrainerProfile; onProfileChange: (profile: TrainerProfile) => void;
   nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; nutritionClient: Client | null;
@@ -1261,13 +1280,13 @@ function ViewRenderer(props: {
   onSaveNutrition: (plan: NutritionPlan) => void; onDeleteNutrition: (clientId: string) => void;
 }) {
   switch (props.view) {
-    case "dashboard": return <Dashboard now={props.now} clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} workoutHistory={props.workoutHistory} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
+    case "dashboard": return <Dashboard now={props.now} checkins={props.checkins} clients={props.clients} appointments={props.appointments} nutritionPlans={props.nutritionPlans} mealLogs={props.mealLogs} workoutHistory={props.workoutHistory} onModal={props.onModal} onClient={props.onClient} onStartWorkout={props.onStartWorkout} onNavigate={props.onNavigate} onAddWorkout={props.onAddWorkout} />;
     case "clients": return <ClientsView clients={props.clients} query={props.query} onClient={props.onClient} onAdd={() => props.onModal("client")} />;
     case "calendar": return <CalendarView clients={props.clients} appointments={props.appointments} onSchedule={props.onSchedule} onOpenClient={props.onClient} onStartWorkout={props.onStartWorkout} onCancel={props.onCancelAppointment} onDelete={props.onDeleteAppointment} autoSchedule={props.calendarIntent} />;
     case "plans": return <PlansView clients={props.clients} workoutPlans={props.workoutPlans} initialPlanId={props.selectedPlanId} onOpenDetail={props.onOpenPlan} onCloseDetail={() => props.onNavigate("plans")} onSavePlan={props.onSavePlan} onUpdatePlan={props.onUpdatePlan} notify={props.notify} planIntentClientId={props.planIntentClientId} />;
     case "exercises": return <ExercisesView />;
     case "progress": return <ProgressView clients={props.clients} workoutHistory={props.workoutHistory} onMeasurement={() => props.onModal("measurement")} />;
-    case "checkins": return <CheckinsView notify={props.notify} />;
+    case "checkins": return <CheckinsView clients={props.clients} checkins={props.checkins} onReview={props.onReviewCheckin} onOpenClient={props.onClient} />;
     case "nutrition": return props.nutritionClient
       ? <NutritionEditor client={props.nutritionClient} plan={props.nutritionPlans.find((plan) => plan.clientId === props.nutritionClient!.id)} onBack={props.onCloseNutrition} onSave={props.onSaveNutrition} onDelete={props.onDeleteNutrition} />
       : <NutritionView clients={props.clients} plans={props.nutritionPlans} logs={props.mealLogs} onOpen={props.onOpenNutrition} />;
@@ -1278,7 +1297,7 @@ function ViewRenderer(props: {
   }
 }
 
-function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, workoutHistory, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { now: Date; clients: Client[]; appointments: CalendarAppointment[]; nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; workoutHistory: WorkoutCompletion[]; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
+function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, workoutHistory, checkins, onModal, onClient, onStartWorkout, onNavigate, onAddWorkout }: { now: Date; clients: Client[]; appointments: CalendarAppointment[]; nutritionPlans: NutritionPlan[]; mealLogs: MealLog[]; workoutHistory: WorkoutCompletion[]; checkins: CheckinRecord[]; onModal: (type: ModalType) => void; onClient: (id: string) => void; onStartWorkout: (id: string) => void; onNavigate: (view: View) => void; onAddWorkout: () => void }) {
   const today = appointments.filter((item) => item.date === dateKey(now)).sort((a, b) => a.hour - b.hour);
   const nextAppointment = today.find((item) => item.hour >= now.getHours()) ?? today[0];
   const nextClient = nextAppointment ? clients.find((client) => client.id === nextAppointment.clientId) ?? null : null;
@@ -1407,6 +1426,35 @@ function Dashboard({ now, clients, appointments, nutritionPlans, mealLogs, worko
           break;
         }
       }
+    }
+  }
+
+  // Check-iny za bieżący tydzień: przysłane i czekające na trenera, oraz brakujące.
+  const thisWeek = currentWeekKey();
+  for (const client of clients) {
+    const record = findCheckin(checkins, client.id, thisWeek);
+    if (record && !record.reviewedAt) {
+      attention.push({
+        id: `checkin-${client.id}`,
+        title: client.name,
+        detail: `Przesłał check-in · wynik ${checkinScore(record)}%`,
+        cta: "Otwórz raport",
+        action: () => onNavigate("checkins"),
+        tone: "todo",
+        weight: 1.5,
+      });
+    }
+    // O brak check-inu pytamy dopiero pod koniec tygodnia, żeby nie alarmować w poniedziałek.
+    if (!record && client.status === "Aktywny" && (now.getDay() === 0 || now.getDay() >= 5)) {
+      attention.push({
+        id: `checkin-missing-${client.id}`,
+        title: client.name,
+        detail: "Brak check-inu za ten tydzień",
+        cta: "Otwórz profil",
+        action: () => onClient(client.id),
+        tone: "todo",
+        weight: 2.5,
+      });
     }
   }
 
@@ -2505,11 +2553,6 @@ function ProgressView({ clients, workoutHistory, onMeasurement }: { clients: Cli
       : <div className="mt-4"><EmptyState icon={Users} title="Brak zapisanych treningów" text="Po zapisaniu treningów zobaczysz tutaj, kto ćwiczy regularnie."/></div>}
   </section></>;
 }
-function CheckinsView({ notify }: { notify: (text: string) => void }) {
-  if (!checkins.length) return <><PageHeader title="Check-iny" subtitle="Odpowiedzi podopiecznych i formularze kontrolne." action="Nowy formularz" onAction={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} /><section className={cardClass}><EmptyState icon={CheckSquare} title="Brak check-inów" text="Pierwsze odpowiedzi pojawią się tutaj po wysłaniu formularza podopiecznym."/></section></>;
-  return <><PageHeader title="Check-iny" subtitle={`${checkins.filter((item) => item.status === "Nowy").length} nowych odpowiedzi do sprawdzenia.`} action="Nowy formularz" onAction={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} /><div className="grid gap-4 xl:grid-cols-[1.3fr_.7fr]"><section className={`${cardClass} overflow-hidden`}><div className="border-b border-black/[0.06] px-6 py-4"><h2 className="font-black">Ostatnie odpowiedzi</h2></div>{checkins.map((item) => <button onClick={() => notify(`Otworzono check-in: ${item.client}`)} key={item.client} className="grid w-full grid-cols-[1fr_auto] gap-4 border-b border-black/[0.055] px-5 py-4 text-left last:border-0 sm:grid-cols-[1fr_180px_auto] sm:px-6"><div className="flex min-w-0 gap-3"><Avatar initials={item.initials} dark={item.status === "Nowy"} /><div className="min-w-0"><div className="flex items-center gap-2"><p className="truncate text-sm font-black">{item.client}</p><Badge tone={item.status === "Nowy" ? "dark" : "neutral"}>{item.status}</Badge></div><p className="mt-1 truncate text-[11px] text-black/38">{item.note}</p><p className="mt-1 text-[9px] text-black/28">{item.date}</p></div></div><div className="hidden grid-cols-3 gap-2 sm:grid">{[["Energia",item.energy], ["Sen",item.sleep], ["Stres",item.stress]].map(([label,value]) => <div key={String(label)} className="rounded-xl bg-[#f3f3f1] p-2 text-center"><p className="text-sm font-black">{value as number}/10</p><p className="text-[8px] uppercase text-black/30">{label as string}</p></div>)}</div><ChevronRight size={16} className="self-center text-black/28" /></button>)}</section><aside className="space-y-4"><section className="rounded-[24px] bg-black p-6 text-white"><Flame size={22} /><p className="mt-7 text-4xl font-black">82%</p><p className="text-xs text-white/42">terminowość check-inów</p><div className="mt-5"><ProgressBar value={82} dark /></div></section><section className={`${cardClass} p-5`}><h3 className="font-black">Wymaga uwagi</h3><div className="mt-4 space-y-3"><div className="rounded-2xl bg-red-50 p-3"><p className="text-xs font-black text-red-800">Wysoki stres · Piotr</p><p className="mt-1 text-[10px] text-red-700/65">7/10 przez drugi tydzień</p></div><div className="rounded-2xl bg-amber-50 p-3"><p className="text-xs font-black text-amber-800">Brak odpowiedzi · Karolina</p><p className="mt-1 text-[10px] text-amber-700/65">Termin minął wczoraj</p></div></div></section></aside></div></>;
-}
-
 function AutomationsView({ notify }: { notify: (text:string)=>void }) {
   const [active, setActive] = useState(automations.map((item)=>item.active));
   if (!automations.length) return <><PageHeader title="Automatyzacje" subtitle="Reguły działające w tle." action="Nowa automatyzacja" onAction={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} /><section className={cardClass}><EmptyState icon={Zap} title="Brak automatyzacji" text="Utworzone reguły i przypomnienia pojawią się w tym miejscu."/></section></>;
@@ -2659,6 +2702,8 @@ function ClientPortal({
   dietPlan,
   mealLog,
   onToggleMeal,
+  checkins,
+  onSubmitCheckin,
 }: {
   client: Client;
   program?: TrainingProgram;
@@ -2670,6 +2715,8 @@ function ClientPortal({
   dietPlan?: NutritionPlan;
   mealLog?: MealLog;
   onToggleMeal: (mealId: string) => void;
+  checkins: CheckinRecord[];
+  onSubmitCheckin: (record: CheckinRecord) => void;
 }) {
   const [tab, setTab] = useState<"today" | "plan" | "diet" | "progress" | "profile">("today");
   const [activeWorkoutDayId, setActiveWorkoutDayId] = useState<string | null>(null);
@@ -2686,7 +2733,7 @@ function ClientPortal({
     { id: "profile", label: "Profil", icon: Users },
   ];
   if (!program) {
-    return <div className="futurebody-app futurebody-app-enter min-h-[100svh] bg-[#050505] text-[#f7f7f7]"><header className="fb-dark-surface flex h-[72px] items-center border-b border-white/[0.07] px-4 text-white"><img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover"/><div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">{previewMode ? "Tryb podglądu" : "Panel podopiecznego"}</p></div><button onClick={onLogout} className="ml-auto grid h-10 w-10 place-items-center rounded-full border border-white/10" aria-label="Wyloguj"><LogOut size={15}/></button></header><main className="grid min-h-[calc(100svh-72px)] place-items-center px-5 py-10"><section className={`${cardClass} w-full max-w-lg p-7 text-center sm:p-10`}><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-black text-white"><Dumbbell size={22}/></span><h1 className="mt-6 text-2xl font-black tracking-[-0.04em]">Plan jest w przygotowaniu</h1><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-black/42">Twój trener nie przypisał jeszcze aktywnego programu. Gdy plan będzie gotowy, pojawi się tutaj automatycznie.</p><button onClick={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} className="mt-6 h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase text-white">Napisz do trenera</button></section></main></div>;
+    return <div className="futurebody-app futurebody-app-enter min-h-[100svh] bg-[#050505] text-[#f7f7f7]"><header className="fb-dark-surface flex h-[72px] items-center border-b border-white/[0.07] px-4 text-white"><img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover"/><div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">{previewMode ? "Tryb podglądu" : "Panel podopiecznego"}</p></div><button onClick={onLogout} className="ml-auto grid h-11 w-11 place-items-center rounded-full border border-white/10" aria-label="Wyloguj"><LogOut size={15}/></button></header><main className="grid min-h-[calc(100svh-72px)] place-items-center px-5 py-10"><section className={`${cardClass} w-full max-w-lg p-7 text-center sm:p-10`}><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-black text-white"><Dumbbell size={22}/></span><h1 className="mt-6 text-2xl font-black tracking-[-0.04em]">Plan jest w przygotowaniu</h1><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-black/42">Twój trener nie przypisał jeszcze aktywnego programu. Gdy plan będzie gotowy, pojawi się tutaj automatycznie.</p><button onClick={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} className="mt-6 h-11 rounded-full bg-black px-6 text-[10px] font-black uppercase text-white">Napisz do trenera</button></section></main></div>;
   }
   const activeWorkoutDay = program.trainingDays.find((day) => day.id === activeWorkoutDayId);
   const todayDay = program.trainingDays[0];
@@ -2703,7 +2750,7 @@ function ClientPortal({
           <img src="/futurebody-logo.png" alt="FutureBody" className="h-10 w-10 rounded-[13px] object-cover" />
           <div className="ml-3"><p className="text-[11px] font-black tracking-[0.16em]">FUTUREBODY</p><p className="text-[8px] uppercase tracking-[0.28em] text-white/32">Panel podopiecznego</p></div>
           <nav className="mx-auto hidden items-center gap-1 md:flex">{tabs.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => { setTab(item.id); setActiveWorkoutDayId(null); }} className={`flex min-h-11 items-center gap-2 rounded-full px-4 text-[10px] font-black transition ${tab === item.id ? "bg-[color-mix(in_srgb,var(--fb-gold)_14%,transparent)] text-[var(--fb-gold)]" : "text-[var(--fb-text-muted)] hover:text-[var(--fb-text)]"}`}><Icon size={14} />{item.label}</button>; })}</nav>
-          <button onClick={onLogout} className="ml-auto grid h-9 w-9 place-items-center rounded-full border border-black/10 bg-white" aria-label="Wyloguj"><LogOut size={15} /></button>
+          <button onClick={onLogout} className="ml-auto grid h-11 w-11 place-items-center rounded-full border border-black/10 bg-white" aria-label="Wyloguj"><LogOut size={15} /></button>
         </div>
       </header>
 
@@ -2722,7 +2769,7 @@ function ClientPortal({
               <div className="space-y-4">
                 <section className={`${cardClass} p-5`}><div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/32">Najbliższe spotkanie</p><h3 className="mt-1 font-black">{client.nextSession}</h3></div><CalendarDays size={20} /></div><p className="mt-4 text-xs text-black/42">Termin jest zsynchronizowany z kalendarzem trenera.</p></section>
                 <section className={`${cardClass} p-5`}><div className="flex justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-black/32">Ukończone treningi</p><p className="mt-2 text-2xl font-black">{completedWorkouts}</p></div><CheckCircle2 size={20} /></div><p className="mt-3 text-[10px] text-black/38">Każdy zapisany trening aktualizuje Twoją historię.</p></section>
-                <section className={`${cardClass} p-5`}><p className="text-[9px] font-black uppercase tracking-wider text-black/32">Tygodniowy check-in</p><h3 className="mt-2 font-black">Jak się dzisiaj czujesz?</h3><button onClick={() => notify("Ta funkcja uruchomi się po podłączeniu bazy danych.")} className="mt-4 text-[10px] font-black uppercase tracking-wider">Uzupełnij formularz <ChevronRight size={13} className="inline" /></button></section>
+                <CheckinForm clientId={client.id} existing={findCheckin(checkins, client.id, currentWeekKey())} onSubmit={onSubmitCheckin} />
               </div>
             </div>
           </>

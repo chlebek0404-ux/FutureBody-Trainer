@@ -17,7 +17,7 @@ FutureBody Trainer to mobilne centrum codziennej pracy trenera personalnego. Naj
 
 - `app/` — routing, layout i globalne style
 - `components/` — interfejs aplikacji i główne przepływy
-- `lib/` — modele danych, biblioteka ćwiczeń, Supabase i eksport PDF
+- `lib/` — modele danych, biblioteka ćwiczeń, check-iny, dieta i Supabase
 - `public/` — logo, ikony, manifest, service worker i wizualizacje ćwiczeń
 - `supabase/migrations/` — schemat bazy danych i polityki dostępu
 - `export-html/` — opcjonalny eksporter pojedynczego HTML; nie jest źródłem aplikacji
