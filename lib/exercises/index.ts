@@ -213,3 +213,15 @@ export function suggestExercises(goal: string, limit = 12) {
 
   return picked.slice(0, limit);
 }
+
+/**
+ * Odmiana rzeczownika przez liczbę: 1 ćwiczenie, 2 ćwiczenia, 5 ćwiczeń.
+ * Wynik nie zawiera liczby, żeby dało się go użyć w dowolnym miejscu zdania.
+ */
+export function pluralExercises(count: number) {
+  const last = count % 10;
+  const lastTwo = count % 100;
+  if (count === 1) return "ćwiczenie";
+  if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return "ćwiczenia";
+  return "ćwiczeń";
+}

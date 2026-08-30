@@ -14,6 +14,7 @@ import {
   getRegression,
   getExerciseSubstitutions,
   movementPatternLabels,
+  pluralExercises,
   quickFilters,
   trainingGoals,
   type ExerciseLevel,
@@ -31,15 +32,6 @@ function readStored(key: string): string[] {
   } catch {
     return [];
   }
-}
-
-/** Odmiana rzeczownika po liczbie: 1 ćwiczenie, 2 ćwiczenia, 5 ćwiczeń. */
-function pluralExercises(count: number) {
-  const last = count % 10;
-  const lastTwo = count % 100;
-  if (count === 1) return "ćwiczenie";
-  if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return "ćwiczenia";
-  return "ćwiczeń";
 }
 
 const levels: ExerciseLevel[] = ["Podstawowy", "Średni", "Zaawansowany"];

@@ -1,51 +1,7 @@
 "use client";
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Activity,
-  Apple,
-  Download,
-  BarChart3,
-  Bell,
-  BookOpen,
-  CalendarDays,
-  CalendarPlus,
-  Check,
-  CheckCircle2,
-  CheckSquare,
-  ChevronLeft,
-  ChevronRight,
-  Dumbbell,
-  Eye,
-  EyeOff,
-  FileText,
-  Filter,
-  Flame,
-  FolderOpen,
-  LayoutDashboard,
-  Library,
-  LockKeyhole,
-  LogOut,
-  Mail,
-  Menu,
-  Monitor,
-  MoreHorizontal,
-  Moon,
-  Phone,
-  Plus,
-  Search,
-  Settings,
-  ShieldCheck,
-  Sparkles,
-  Sun,
-  TrendingUp,
-  Upload,
-  UserPlus,
-  Users,
-  X,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
+import { Activity, Apple, ArrowDown, ArrowUp, BarChart3, Bell, BookOpen, CalendarDays, CalendarPlus, Check, CheckCircle2, CheckSquare, ChevronLeft, ChevronRight, Download, Dumbbell, Eye, EyeOff, FileText, Filter, Flame, FolderOpen, LayoutDashboard, Library, LockKeyhole, LogOut, Mail, Menu, Monitor, Moon, MoreHorizontal, Phone, Plus, Search, Settings, ShieldCheck, Sparkles, Sun, TrendingUp, type LucideIcon, Upload, UserPlus, Users, X, Zap } from "lucide-react";
 import {
   automations,
   checkins,
@@ -62,8 +18,8 @@ import { PlanEditor } from "@/components/training-plan";
 import { NutritionEditor, NutritionView } from "@/components/nutrition-plan";
 import { calculateTargets, complianceForDay, sumMeals, todayKey, type MealLog, type NutritionPlan } from "@/lib/nutrition";
 import { ClientWorkout } from "@/components/client-workout";
-import { exerciseLibrary, searchExercises, suggestExercises } from "@/lib/exercises";
-import { createTrainingDays, createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
+import { exerciseLibrary, pluralExercises, searchExercises, suggestExercises } from "@/lib/exercises";
+import { createTrainingDays, createTrainingDaysFromPlan, createTrainingProgram, type TrainingProgram, type WorkoutCompletion } from "@/lib/training-programs";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { enableSmoothWheelScroll } from "@/lib/smooth-scroll";
 import { initPwa, type PwaState } from "@/lib/pwa";
@@ -1882,22 +1838,33 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
     equipment: "Pełna siłownia", limitations: "", preference: "Trening siłowy", recovery: "Dobra",
   });
   const [search, setSearch] = useState("");
-  const [manualIds, setManualIds] = useState<string[]>([]);
+  // Ręczny dobór trzyma osobną listę na każdy dzień treningowy.
+  const [dayPicks, setDayPicks] = useState<string[][]>([]);
+  const [activeDayIndex, setActiveDayIndex] = useState(0);
 
   const suggested = useMemo(() => suggestExercises(survey.goal, 18), [survey.goal]);
   const catalog = useMemo(() => searchExercises(search, { limit: 12 }), [search]);
   const visibleExercises = search ? catalog : suggested;
   const selectedClient = clients.find((client) => client.id === clientId);
 
+  const dayCount = Number(survey.days);
+
+  // Liczba dni pochodzi z ankiety, więc listy dopasowują się do niej przy każdym renderze.
+  const picks = useMemo(
+    () => Array.from({ length: dayCount }, (_, index) => dayPicks[index] ?? []),
+    [dayPicks, dayCount],
+  );
+  const currentDay = Math.min(activeDayIndex, dayCount - 1);
+
   // Ścieżka automatyczna dobiera ćwiczenia z celu; ręczna korzysta z wyboru trenera.
-  const autoIds = useMemo(() => suggestExercises(survey.goal, Number(survey.days) * 3).map((item) => item.id), [survey.goal, survey.days]);
-  const exerciseIds = path === "auto" ? autoIds : manualIds;
+  const autoIds = useMemo(() => suggestExercises(survey.goal, dayCount * 3).map((item) => item.id), [survey.goal, dayCount]);
+  const exerciseIds = path === "auto" ? autoIds : picks.flat();
 
   // Podgląd planu: dokładnie ten sam rozkład, który zostanie zapisany.
-  const previewDays = useMemo(
-    () => (exerciseIds.length ? createTrainingDays(Number(survey.days), exerciseIds) : []),
-    [exerciseIds, survey.days],
-  );
+  const previewDays = useMemo(() => {
+    if (path === "manual") return picks.some((day) => day.length) ? createTrainingDaysFromPlan(picks) : [];
+    return exerciseIds.length ? createTrainingDays(dayCount, exerciseIds) : [];
+  }, [path, picks, exerciseIds, dayCount]);
 
   const steps = path === "manual"
     ? ["Podopieczny", "Ankieta", "Ćwiczenia", "Podsumowanie"]
@@ -1909,7 +1876,23 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
   }
 
   function toggleExercise(id: string) {
-    setManualIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+    setDayPicks(() => {
+      const next = picks.map((day) => [...day]);
+      const day = next[currentDay] ?? [];
+      next[currentDay] = day.includes(id) ? day.filter((item) => item !== id) : [...day, id];
+      return next;
+    });
+  }
+
+  function moveExercise(index: number, direction: -1 | 1) {
+    setDayPicks(() => {
+      const next = picks.map((day) => [...day]);
+      const day = next[currentDay];
+      const target = index + direction;
+      if (!day || target < 0 || target >= day.length) return next;
+      [day[index], day[target]] = [day[target], day[index]];
+      return next;
+    });
   }
 
   function finish() {
@@ -1917,9 +1900,9 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
     onSave(createTrainingProgram({
       name: `${selectedClient.name.split(" ")[0]} · ${survey.goal}`,
       category: survey.goal,
-      dayCount: Number(survey.days),
+      dayCount,
       clientId: selectedClient.id,
-      exerciseIds,
+      ...(path === "manual" ? { dayExerciseIds: picks } : { exerciseIds }),
       duration: "8 tyg.",
     }), selectedClient.id);
   }
@@ -1971,8 +1954,11 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
     );
   }
 
-  const canContinue = step === 0 ? Boolean(clientId) : true;
-  const canFinish = Boolean(selectedClient) && exerciseIds.length > 0;
+  const emptyDays = picks.map((day, index) => (day.length ? null : index + 1)).filter((value): value is number => value !== null);
+  // Do podsumowania przechodzimy dopiero, gdy każdy dzień ma co najmniej jedno ćwiczenie.
+  const daysComplete = path !== "manual" || emptyDays.length === 0;
+  const canContinue = step === 0 ? Boolean(clientId) : steps[step] === "Ćwiczenia" ? daysComplete : true;
+  const canFinish = Boolean(selectedClient) && exerciseIds.length > 0 && daysComplete;
 
   return (
     <div className={shell}>
@@ -2047,44 +2033,91 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
 
           {steps[step] === "Ćwiczenia" ? (
             <div>
-              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-                <div>
-                  <h3 className="text-xl font-black tracking-[-0.03em]">Dobierz ćwiczenia</h3>
-                  <p className="mt-1.5 text-sm text-black/42">{manualIds.length} wybranych{search ? "" : " · podpowiedzi pod cel"}</p>
-                </div>
-                <label className="flex h-12 items-center rounded-full bg-white px-4">
-                  <Search size={15} className="mr-2 shrink-0 text-black/28" />
-                  <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-full w-full min-w-0 bg-transparent text-sm outline-none sm:w-56" placeholder="Szukaj w bazie…" aria-label="Szukaj ćwiczenia" />
-                </label>
+              <h3 className="text-xl font-black tracking-[-0.03em]">Ułóż każdy dzień osobno</h3>
+              <p className="mt-1.5 text-sm text-black/42">
+                Wybierasz ćwiczenia dla dnia 1, potem dnia 2 i tak dalej. Kolejność na liście to kolejność treningu.
+              </p>
+
+              {/* Przełącznik dni — zawsze widoczny, z licznikiem ćwiczeń */}
+              <div className="fb-scroll-x mt-5 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+                {picks.map((day, index) => {
+                  const active = index === currentDay;
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => setActiveDayIndex(index)}
+                      aria-pressed={active}
+                      className={`flex h-14 shrink-0 items-center gap-2.5 rounded-2xl border px-4 text-left transition ${active ? "border-black bg-black text-white" : "border-black/[0.08] bg-white"}`}
+                    >
+                      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-black ${active ? "bg-white text-black" : day.length ? "bg-black text-white" : "bg-black/[0.07] text-black/40"}`}>
+                        {day.length ? <Check size={13} /> : index + 1}
+                      </span>
+                      <span>
+                        <span className="block text-xs font-black">Dzień {index + 1}</span>
+                        <span className={`block text-[10px] ${active ? "text-white/50" : "text-black/38"}`}>
+                          {day.length ? `${day.length} ${pluralExercises(day.length)}` : "pusty"}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-              {manualIds.length ? (
-                <div className="mt-4 rounded-2xl border border-black/[0.07] bg-white p-3.5">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-black/32">Wybrane ({manualIds.length})</p>
-                  <div className="mt-2.5 flex flex-wrap gap-1.5">
-                    {manualIds.map((id) => {
+
+              {/* Lista dnia w kolejności wykonania */}
+              <section className={`${cardClass} mt-4 overflow-hidden`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.06] px-4 py-3.5 sm:px-5">
+                  <h4 className="text-sm font-black">Dzień {currentDay + 1} · plan treningu</h4>
+                  <span className="text-[10px] font-bold text-black/38">{picks[currentDay]?.length ?? 0} w kolejce</span>
+                </div>
+                {picks[currentDay]?.length ? (
+                  <ol className="divide-y divide-black/[0.055]">
+                    {picks[currentDay].map((id, index) => {
                       const exercise = exerciseLibrary.find((item) => item.id === id);
                       if (!exercise) return null;
                       return (
-                        <button key={id} onClick={() => toggleExercise(id)} className="flex min-h-9 items-center gap-1.5 rounded-full bg-black px-3 text-[10px] font-black text-white" aria-label={`Usuń ${exercise.name} z wyboru`}>
-                          {exercise.name}
-                          <X size={12} className="opacity-60" />
-                        </button>
+                        <li key={id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-black text-[10px] font-black text-white">{index + 1}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-black">{exercise.name}</span>
+                            <span className="mt-0.5 block truncate text-[10px] text-black/40">{exercise.muscle} · {exercise.equipmentLabel}</span>
+                          </span>
+                          <button onClick={() => moveExercise(index, -1)} disabled={index === 0} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#f1f1ef] disabled:opacity-25" aria-label={`Przesuń ${exercise.name} wyżej`}><ArrowUp size={13} /></button>
+                          <button onClick={() => moveExercise(index, 1)} disabled={index === picks[currentDay].length - 1} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#f1f1ef] disabled:opacity-25" aria-label={`Przesuń ${exercise.name} niżej`}><ArrowDown size={13} /></button>
+                          <button onClick={() => toggleExercise(id)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-red-50 text-red-700" aria-label={`Usuń ${exercise.name} z dnia ${currentDay + 1}`}><X size={14} /></button>
+                        </li>
                       );
                     })}
-                  </div>
-                </div>
-              ) : null}
+                  </ol>
+                ) : (
+                  <p className="px-5 py-8 text-center text-xs text-black/38">Dzień {currentDay + 1} jest pusty. Wybierz ćwiczenia z listy poniżej.</p>
+                )}
+              </section>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {/* Dobór ćwiczeń do aktywnego dnia */}
+              <div className="mt-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+                <div>
+                  <h4 className="text-sm font-black">Dodaj do dnia {currentDay + 1}</h4>
+                  <p className="mt-1 text-[11px] text-black/42">{search ? "Wyniki wyszukiwania" : `Podpowiedzi pod cel: ${survey.goal.toLowerCase()}`}</p>
+                </div>
+                <label className="flex h-12 items-center rounded-full bg-white px-4">
+                  <Search size={15} className="mr-2 shrink-0 text-black/28" />
+                  <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-full w-full min-w-0 bg-transparent text-base outline-none sm:w-56 sm:text-sm" placeholder="Szukaj w bazie…" aria-label="Szukaj ćwiczenia" />
+                  {search ? <button onClick={() => setSearch("")} aria-label="Wyczyść" className="shrink-0 text-black/35"><X size={14} /></button> : null}
+                </label>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {visibleExercises.map((exercise) => {
-                  const active = manualIds.includes(exercise.id);
+                  const active = picks[currentDay]?.includes(exercise.id) ?? false;
+                  const otherDay = picks.findIndex((day, index) => index !== currentDay && day.includes(exercise.id));
                   return (
                     <button key={exercise.id} onClick={() => toggleExercise(exercise.id)} aria-pressed={active} className={`overflow-hidden rounded-2xl border text-left transition ${active ? "border-black bg-black text-white" : "border-black/[0.07] bg-white"}`}>
                       <ExerciseMotion pattern={exercise.pattern} compact />
                       <span className="flex items-start gap-2 p-4">
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-xs font-black">{exercise.name}</span>
-                          <span className={`mt-1 block truncate text-[10px] ${active ? "text-white/45" : "text-black/38"}`}>{exercise.muscle} · {exercise.equipment}</span>
+                          <span className={`mt-1 block truncate text-[10px] ${active ? "text-white/45" : "text-black/38"}`}>{exercise.muscle} · {exercise.equipmentLabel}</span>
+                          {otherDay >= 0 ? <span className="mt-1.5 inline-block rounded-full bg-[#ffc400]/18 px-2 py-0.5 text-[9px] font-black text-[#7a5c00]">Już w dniu {otherDay + 1}</span> : null}
                         </span>
                         <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${active ? "bg-white text-black" : "bg-black/[0.06]"}`}>{active ? <Check size={14} /> : <Plus size={14} />}</span>
                       </span>
@@ -2103,7 +2136,7 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.06] p-5">
                   <div>
                     <h4 className="font-black">Ćwiczenia w planie</h4>
-                    <p className="mt-0.5 text-[11px] text-black/38">{exerciseIds.length} ćwiczeń w {previewDays.length} {previewDays.length === 1 ? "dniu" : "dniach"} — dokładnie to zostanie zapisane.</p>
+                    <p className="mt-0.5 text-[11px] text-black/38">{exerciseIds.length} {pluralExercises(exerciseIds.length)} w {previewDays.length} {previewDays.length === 1 ? "dniu" : "dniach"} — dokładnie to zostanie zapisane.</p>
                   </div>
                   {path === "manual" ? <button onClick={() => setStep(2)} className="h-11 rounded-full border border-black/12 px-4 text-[10px] font-black uppercase tracking-wider">Zmień wybór</button> : null}
                 </div>
@@ -2112,7 +2145,7 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
                     <div key={day.id} className="p-5">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <h5 className="text-sm font-black">{day.name}</h5>
-                        <span className="text-[10px] font-bold text-black/38">{day.focus} · {day.items.length} ćwiczeń</span>
+                        <span className="text-[10px] font-bold text-black/38">{day.focus} · {day.items.length} {pluralExercises(day.items.length)}</span>
                       </div>
                       <ol className="mt-3 space-y-2">
                         {day.items.map((item, index) => {
@@ -2122,7 +2155,7 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
                               <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-black text-[10px] font-black text-white">{index + 1}</span>
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate text-xs font-black">{exercise?.name ?? "Ćwiczenie"}</span>
-                                <span className="mt-0.5 block truncate text-[10px] text-black/40">{exercise?.muscle} · {exercise?.equipment}</span>
+                                <span className="mt-0.5 block truncate text-[10px] text-black/40">{exercise?.muscle} · {exercise?.equipmentLabel}</span>
                               </span>
                               <span className="shrink-0 text-[10px] font-black text-black/45">{item.sets} × {item.reps}</span>
                             </li>
@@ -2176,6 +2209,11 @@ function PlanWizard({ initialPath, clients, presetClientId, onClose, onSave }: {
           >
             {step === 0 ? "Zmień sposób" : "Wstecz"}
           </button>
+          {steps[step] === "Ćwiczenia" && emptyDays.length ? (
+            <p className="min-w-0 flex-1 px-3 text-center text-[10px] font-bold leading-4 text-black/42">
+              Uzupełnij {emptyDays.length === 1 ? `dzień ${emptyDays[0]}` : `dni: ${emptyDays.join(", ")}`}
+            </p>
+          ) : null}
           {step < lastStep ? (
             <button disabled={!canContinue} onClick={() => setStep((current) => Math.min(lastStep, current + 1))} className="h-12 rounded-full bg-black px-7 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-30">Dalej</button>
           ) : (
